@@ -7,3 +7,5 @@ data/
 *.zip
 .env
 *.log
+verifai/
+claude_usage.json
