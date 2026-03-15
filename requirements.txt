@@ -1,0 +1,51 @@
+# VerifAI Requirements
+# Python 3.10+
+
+# Core API & Web Framework
+anthropic==0.18.1
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+streamlit==1.31.0
+python-multipart==0.0.9
+python-dotenv==1.0.0
+
+# Database & Vector Store
+chromadb==0.4.22
+neo4j==5.17.0
+
+# NLP & Embeddings
+sentence-transformers==2.3.1
+spacy==3.7.2
+
+# Web Scraping & Data Processing
+beautifulsoup4==4.12.3
+requests==2.31.0
+lxml==5.1.0
+
+# Document Processing
+PyPDF2==3.0.1
+python-docx==1.1.0
+
+# Image Processing
+Pillow==10.2.0
+opencv-python-headless==4.9.0.80
+
+# Security
+cryptography==42.0.2
+pyjwt==2.8.0
+
+# Utilities
+pydantic==2.6.0
+pandas==2.2.0
+numpy==1.26.3
+
+# Testing
+pytest==8.0.0
+pytest-asyncio==0.23.4
+httpx==0.26.0
+
+# Logging & Monitoring
+loguru==0.7.2
+
+# Optional: Re-ranking (can skip for demo)
+# sentence-transformers[cross-encoder]
