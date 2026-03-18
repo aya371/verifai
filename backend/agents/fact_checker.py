@@ -1,4 +1,4 @@
-import os
+﻿import os
 from anthropic import Anthropic
 from typing import Dict, Any
 from config import config
@@ -62,10 +62,7 @@ class FactChecker:
             # AI detection on user input
             verdict["input_ai_detection"] = self.ai_detector.detect(claim_text)
             # AI detection on each source snippet
-            verdict["source_ai_detection"] = [
-                self.ai_detector.detect(chunk.get("text", ""))
-                for chunk in evidence_chunks[:3]
-            ]
+            verdict["source_ai_detection"] = []
             return verdict
 
         except Exception as e:
@@ -101,4 +98,5 @@ class FactChecker:
                 "reasoning": response_text[:200],
                 "flags": ["parse_error"]
             }
+
 

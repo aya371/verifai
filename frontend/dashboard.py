@@ -1,539 +1,891 @@
 import streamlit as st
-import requests as http_requests
+import requests
 import base64
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import requests
 from datetime import datetime
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 st.set_page_config(
-    page_title="VerifAI - Digital Trust Verification",
-    page_icon="V",
-    layout="wide"
+    page_title="VerifAI — Digital Trust Platform",
+    page_icon="🛡",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
+
+# ── Dynamic theme injection ──────────────────────────────────────────────
+_theme = st.session_state.get("theme", "dark")
+if _theme == "light":
+    _vars = """
+    --bg-void:    #f8fafc;
+    --bg-deep:    #f1f5f9;
+    --bg-card:    #ffffff;
+    --bg-hover:   #e2e8f0;
+    --border:     #cbd5e1;
+    --border-lit: #94a3b8;
+    --accent:     #0284c7;
+    --accent-dim: #0369a1;
+    --green:      #16a34a;
+    --green-dim:  #15803d;
+    --red:        #dc2626;
+    --red-dim:    #b91c1c;
+    --amber:      #d97706;
+    --amber-dim:  #b45309;
+    --text-primary:   #0f172a;
+    --text-secondary: #334155;
+    --text-muted:     #64748b;
+    --font-ui:   'Space Grotesk', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    """
+    _bg_override = "background-color: #f8fafc !important;"
+    _text_override = "color: #0f172a !important;"
+else:
+    _vars = """
+    --bg-void:    #080f17;
+    --bg-deep:    #0d1824;
+    --bg-card:    #111f2e;
+    --bg-hover:   #162840;
+    --border:     #1e3448;
+    --border-lit: #2a4d6e;
+    --accent:     #38bdf8;
+    --accent-dim: #0ea5e9;
+    --green:      #4ade80;
+    --green-dim:  #22c55e;
+    --red:        #f87171;
+    --red-dim:    #ef4444;
+    --amber:      #fbbf24;
+    --amber-dim:  #f59e0b;
+    --text-primary:   #f1f8ff;
+    --text-secondary: #94b8d4;
+    --text-muted:     #4a7090;
+    --font-ui:   'Space Grotesk', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    """
+    _bg_override = "background-color: #080f17 !important;"
+    _text_override = "color: #f1f8ff !important;"
+
+st.markdown(f"""
+<style>
+:root {{ {_vars} }}
+html, body, [class*="css"], .main, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{
+    {_bg_override}
+    {_text_override}
+}}
+</style>""", unsafe_allow_html=True)
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
-    html, body, [class*="css"] { font-family: 'IBM Plex Sans', sans-serif; }
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+/* THEME VARS INJECTED DYNAMICALLY */
+
+/* ── Reset & Base ── */
+html, body, [class*="css"] {
+    font-family: var(--font-ui) !important;
+    background-color: var(--bg-void) !important;
+    color: var(--text-primary) !important;
+}
+
+.main .block-container {
+    padding: 1.5rem 2rem 3rem 2rem !important;
+    max-width: 1400px !important;
+}
+
+/* ── Larger readable base font ── */
+html, body, [class*="css"] {
+    font-size: 15px !important;
+}
+
+p, div, span, li {
+    line-height: 1.7 !important;
+}
+
+/* ── Sidebar ── */
+[data-testid="stSidebar"] {
+    background: var(--bg-deep) !important;
+    border-right: 1px solid var(--border) !important;
+}
+[data-testid="stSidebar"] .block-container {
+    padding: 1.5rem 1rem !important;
+}
+
+/* ── Inputs ── */
+[data-testid="stTextInput"] input,
+[data-testid="stTextArea"] textarea {
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-lit) !important;
+    border-radius: 6px !important;
+    color: var(--text-primary) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 14px !important;
+    padding: 10px 14px !important;
+}
+[data-testid="stTextInput"] input:focus,
+[data-testid="stTextArea"] textarea:focus {
+    border-color: var(--accent-dim) !important;
+    box-shadow: 0 0 0 2px #00d4ff15 !important;
+}
+
+/* ── Selectbox ── */
+[data-testid="stSelectbox"] > div > div {
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-lit) !important;
+    border-radius: 6px !important;
+    color: var(--text-primary) !important;
+}
+
+/* ── Buttons ── */
+[data-testid="stButton"] button {
+    background: transparent !important;
+    border: 1px solid var(--accent-dim) !important;
+    color: var(--accent) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    letter-spacing: 1px !important;
+    border-radius: 4px !important;
+    transition: all 0.2s !important;
+}
+[data-testid="stButton"] button:hover {
+    background: #00d4ff12 !important;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 12px #00d4ff20 !important;
+}
+[data-testid="stButton"] button[kind="primary"] {
+    background: linear-gradient(135deg, #00d4ff15, #00d4ff08) !important;
+    border: 1px solid var(--accent) !important;
+    box-shadow: 0 0 20px #00d4ff18, inset 0 1px 0 #00d4ff20 !important;
+}
+[data-testid="stButton"] button[kind="primary"]:hover {
+    background: linear-gradient(135deg, #00d4ff25, #00d4ff15) !important;
+    box-shadow: 0 0 30px #00d4ff30 !important;
+}
+
+/* ── Tabs ── */
+[data-testid="stTabs"] [data-baseweb="tab-list"] {
+    background: transparent !important;
+    border-bottom: 1px solid var(--border) !important;
+    gap: 0 !important;
+}
+[data-testid="stTabs"] [data-baseweb="tab"] {
+    background: transparent !important;
+    color: var(--text-muted) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 11px !important;
+    letter-spacing: 1.5px !important;
+    text-transform: uppercase !important;
+    border-bottom: 2px solid transparent !important;
+    padding: 10px 20px !important;
+}
+[data-testid="stTabs"] [aria-selected="true"] {
+    color: var(--accent) !important;
+    border-bottom: 2px solid var(--accent) !important;
+    background: #00d4ff08 !important;
+}
+
+/* ── Expander ── */
+[data-testid="stExpander"] {
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+}
+[data-testid="stExpander"] summary {
+    font-family: var(--font-mono) !important;
+    font-size: 12px !important;
+    color: var(--text-secondary) !important;
+    letter-spacing: 0.5px !important;
+}
+
+/* ── Progress bar ── */
+[data-testid="stProgress"] > div > div {
+    background: linear-gradient(90deg, var(--accent-dim), var(--accent)) !important;
+    border-radius: 2px !important;
+}
+[data-testid="stProgress"] > div {
+    background: var(--border) !important;
+    border-radius: 2px !important;
+    height: 3px !important;
+}
+
+/* ── Checkbox ── */
+[data-testid="stCheckbox"] label {
+    font-family: var(--font-mono) !important;
+    font-size: 12px !important;
+    color: var(--text-secondary) !important;
+}
+
+/* ── File uploader ── */
+[data-testid="stFileUploader"] {
+    background: var(--bg-card) !important;
+    border: 1px dashed var(--border-lit) !important;
+    border-radius: 8px !important;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-void); }
+::-webkit-scrollbar-thumb { background: var(--border-lit); border-radius: 2px; }
+
+
+/* ── Light Theme ── */
+[data-theme="light"] {
+    --bg-void:    #f0f4f8;
+    --bg-deep:    #e2e8f0;
+    --bg-card:    #ffffff;
+    --bg-hover:   #f8fafc;
+    --border:     #cbd5e1;
+    --border-lit: #94a3b8;
+    --accent:     #0284c7;
+    --accent-dim: #0369a1;
+    --green:      #059669;
+    --green-dim:  #047857;
+    --red:        #dc2626;
+    --red-dim:    #b91c1c;
+    --amber:      #d97706;
+    --amber-dim:  #b45309;
+    --text-primary:   #0f172a;
+    --text-secondary: #334155;
+    --text-muted:     #94a3b8;
+}
+
+/* ── Hide Streamlit chrome ── */
+#MainMenu, footer, header { visibility: hidden !important; }
+[data-testid="stDecoration"] { display: none !important; }
 </style>
+
+<script>
+function setTheme(theme) {
+    const root = document.documentElement;
+    if (theme === 'light') {
+        root.setAttribute('data-theme', 'light');
+        root.style.setProperty('--bg-void', '#f0f4f8');
+        root.style.setProperty('--bg-deep', '#e2e8f0');
+        root.style.setProperty('--bg-card', '#ffffff');
+        root.style.setProperty('--bg-hover', '#f8fafc');
+        root.style.setProperty('--border', '#cbd5e1');
+        root.style.setProperty('--border-lit', '#94a3b8');
+        root.style.setProperty('--accent', '#0284c7');
+        root.style.setProperty('--accent-dim', '#0369a1');
+        root.style.setProperty('--green', '#059669');
+        root.style.setProperty('--red', '#dc2626');
+        root.style.setProperty('--amber', '#d97706');
+        root.style.setProperty('--text-primary', '#0f172a');
+        root.style.setProperty('--text-secondary', '#334155');
+        root.style.setProperty('--text-muted', '#94a3b8');
+        document.body.style.backgroundColor = '#f0f4f8';
+        document.body.style.color = '#0f172a';
+    } else {
+        root.removeAttribute('data-theme');
+        root.style.setProperty('--bg-void', '#020408');
+        root.style.setProperty('--bg-deep', '#060d14');
+        root.style.setProperty('--bg-card', '#0a1520');
+        root.style.setProperty('--bg-hover', '#0f1e2e');
+        root.style.setProperty('--border', '#0d2035');
+        root.style.setProperty('--border-lit', '#1a3a55');
+        root.style.setProperty('--accent', '#00d4ff');
+        root.style.setProperty('--accent-dim', '#007a99');
+        root.style.setProperty('--green', '#00ff88');
+        root.style.setProperty('--red', '#ff3366');
+        root.style.setProperty('--amber', '#ffaa00');
+        root.style.setProperty('--text-primary', '#e8f4f8');
+        root.style.setProperty('--text-secondary', '#7a9bb5');
+        root.style.setProperty('--text-muted', '#3a5570');
+        document.body.style.backgroundColor = '#020408';
+        document.body.style.color = '#e8f4f8';
+    }
+    localStorage.setItem('verifai-theme', theme);
+}
+// Apply saved theme on load
+const saved = localStorage.getItem('verifai-theme') || 'dark';
+setTheme(saved);
+</script>
+
 """, unsafe_allow_html=True)
 
 API_URL = "http://localhost:8000/api"
 
+# ── Session state ─────────────────────────────────────────────────────────
+for key in ["identity_result", "identity_candidates", "identity_uploaded_photo",
+            "platform_profiles", "last_response", "auth_token", "current_user"]:
+    if key not in st.session_state:
+        st.session_state[key] = None
+if "theme" not in st.session_state:
+    st.session_state["theme"] = "dark"
 
-def render_source_timeline(sources: list, source_dates: list, verdict: str):
-    """One timeline row per source showing domain + publication date"""
+# ── Auth gate ─────────────────────────────────────────────────────────────
+from frontend.login_page import render_login_page
+if not render_login_page():
+    st.stop()
 
-    if verdict == "REFUTED":
-        dot_color = "#e17055"
-    elif verdict == "SUPPORTED":
-        dot_color = "#00b894"
-    else:
-        dot_color = "#74b9ff"
+# ── Helpers ───────────────────────────────────────────────────────────────
 
+def card(content: str, border_color: str = "var(--border)", glow: bool = False):
+    shadow = f"box-shadow:0 0 24px {border_color}22;" if glow else ""
+    return f"<div style='background:var(--bg-card);border:1px solid {border_color};border-radius:8px;padding:20px;{shadow}'>{content}</div>"
+
+def badge(text: str, color: str):
+    return (f"<span style='background:{color}18;border:1px solid {color}44;color:{color};"
+            f"padding:2px 10px;border-radius:3px;font-family:var(--font-mono);"
+            f"font-size:10px;letter-spacing:1px;font-weight:600;'>{text}</span>")
+
+def label(text: str):
+    return f"<div style='font-family:var(--font-mono);font-size:10px;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;'>{text}</div>"
+
+def verdict_color(v: str):
+    if "SUPPORTED" in v:    return "var(--green)"
+    if "REFUTED" in v:      return "var(--red)"
+    if "INCONCLUSIVE" in v: return "var(--amber)"
+    return "var(--text-secondary)"
+
+def trust_color(score: int):
+    if score >= 75: return "var(--green)"
+    if score >= 50: return "var(--amber)"
+    return "var(--red)"
+
+def render_source_timeline(sources, source_dates, verdict):
+    vc = verdict_color(verdict).replace("var(--", "").replace(")", "")
+    colors = {"green": "#00ff88", "red": "#ff3366", "amber": "#ffaa00", "text-secondary": "#7a9bb5"}
+    dot = colors.get(vc, "#7a9bb5")
     if not source_dates:
         source_dates = ["Unknown"] * len(sources)
-
     while len(source_dates) < len(sources):
         source_dates.append("Unknown")
-
     rows = ""
-    for i, (source, date) in enumerate(zip(sources[:5], source_dates[:5])):
-        domain = source.replace("https://", "").replace("http://", "").split("/")[0]
-        if len(domain) > 42:
-            domain = domain[:42] + "..."
-        date_label = date if (date and date not in ["Unknown", ""]) else "Date unknown"
-        pct = 10 + (i * 16)
-
+    for i, (src, date) in enumerate(zip(sources[:4], source_dates[:4])):
+        domain = src.replace("https://","").replace("http://","").split("/")[0]
+        if len(domain) > 38: domain = domain[:38] + "…"
+        dl = date if date not in ["Unknown","","None"] else "—"
+        pct = 15 + i * 20
         rows += (
-            "<div style='margin-bottom:16px;'>"
-            "<div style='display:flex;align-items:center;gap:10px;margin-bottom:6px;'>"
-            "<span style='width:9px;height:9px;border-radius:50%;background:" + dot_color + ";flex-shrink:0;display:inline-block;box-shadow:0 0 5px " + dot_color + "88;'></span>"
-            "<span style='font-size:12px;font-family:monospace;color:#c0c0d0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'>" + domain + "</span>"
-            "<span style='font-size:11px;font-family:monospace;color:#fff;background:#1a1a2e;border:1px solid " + dot_color + "55;padding:2px 10px;border-radius:4px;flex-shrink:0;'>" + date_label + "</span>"
-            "</div>"
-            "<div style='position:relative;height:5px;background:#12122a;border-radius:3px;'>"
-            "<div style='position:absolute;left:0;top:0;height:100%;width:" + str(pct) + "%;background:linear-gradient(90deg,#1e1e3e," + dot_color + "44);border-radius:3px;'></div>"
-            "<div style='position:absolute;top:50%;left:" + str(pct) + "%;transform:translate(-50%,-50%);width:13px;height:13px;border-radius:50%;background:" + dot_color + ";border:2px solid #0a0a1a;box-shadow:0 0 8px " + dot_color + ";'></div>"
-            "</div>"
-            "</div>"
-        )
-
-    html = (
-        "<div style='background:#0a0a18;border:1px solid #1e1e3e;border-radius:10px;padding:18px 20px;margin-top:16px;'>"
-        "<div style='font-size:10px;font-family:monospace;color:#444;letter-spacing:2px;margin-bottom:16px;'>SOURCE PUBLICATION DATES</div>"
-        + rows +
-        "<div style='display:flex;justify-content:space-between;font-size:10px;font-family:monospace;color:#2a2a4e;margin-top:8px;padding-top:8px;border-top:1px solid #1a1a2e;'>"
-        "<span>OLDER</span><span>RECENT</span>"
-        "</div>"
-        "</div>"
-    )
-
-    st.markdown(html, unsafe_allow_html=True)
-
-
-
-def ai_badge(detection: dict) -> str:
-    """Render an AI detection badge"""
-    if not detection:
-        return ""
-    label = detection.get("label", "Unknown")
-    conf  = detection.get("confidence", 0)
-    is_ai = detection.get("is_ai_generated", False)
-
-    if "AI-Generated" in label or (is_ai and conf >= 80):
-        color, icon = "#e17055", "🤖"
-    elif "Likely AI" in label or (is_ai and conf >= 60):
-        color, icon = "#fdcb6e", "⚠️"
-    elif "Likely Human" in label or "Human" in label:
-        color, icon = "#00b894", "✍️"
-    else:
-        color, icon = "#636e72", "❓"
-
-    return (
-        f"<span style='background:{color}22;border:1px solid {color}55;"
-        f"color:{color};padding:2px 8px;border-radius:4px;"
-        f"font-size:11px;font-family:monospace;'>"
-        f"{icon} {label} ({conf:.0f}%)</span>"
-    )
-
-def render_ai_section(input_detection: dict, source_detections: list, sources: list):
-    """Render the AI detection summary section"""
-    if not input_detection and not source_detections:
-        return
-
-    rows = ""
-
-    # Input detection
-    if input_detection:
-        label  = input_detection.get("label", "Unknown")
-        conf   = input_detection.get("confidence", 0)
-        is_ai  = input_detection.get("is_ai_generated", False)
-        reason = input_detection.get("reasoning", "")
-        signals = input_detection.get("signals", [])
-
-        if is_ai and conf >= 60:
-            dot, dc = "#e17055", "#e17055"
-        elif "Human" in label:
-            dot, dc = "#00b894", "#00b894"
-        else:
-            dot, dc = "#6c757d", "#6c757d"
-
-        rows += (
-            "<div style='margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #1a1a2e;'>"
-            "<div style='display:flex;align-items:center;gap:8px;margin-bottom:6px;'>"
-            f"<span style='font-size:11px;font-family:monospace;color:#888;'>YOUR INPUT</span>"
-            f"<span style='background:{dc}22;border:1px solid {dc}55;color:{dc};"
-            f"padding:2px 10px;border-radius:4px;font-size:11px;font-family:monospace;'>"
-            f"{'🤖' if is_ai else '✍️'} {label} ({conf:.0f}%)</span>"
-            "</div>"
-            f"<div style='font-size:11px;color:#adb5bd;font-family:monospace;'>{reason}</div>"
-        )
-        if signals:
-            rows += "<div style='margin-top:4px;'>" + "".join(
-                f"<span style='background:#1e1e2e;border:1px solid #333;color:#636e72;"
-                f"padding:1px 6px;border-radius:3px;font-size:10px;font-family:monospace;margin:2px;display:inline-block;'>{s}</span>"
-                for s in signals[:4]
-            ) + "</div>"
-        rows += "</div>"
-
-    # Source detections
-    for i, (det, source) in enumerate(zip(source_detections[:3], sources[:3])):
-        if not det:
-            continue
-        label  = det.get("label", "Unknown")
-        conf   = det.get("confidence", 0)
-        is_ai  = det.get("is_ai_generated", False)
-        domain = source.replace("https://","").replace("http://","").split("/")[0]
-
-        if is_ai and conf >= 60:
-            dc = "#e17055"
-        elif "Human" in label:
-            dc = "#00b894"
-        else:
-            dc = "#6c757d"
-
-        rows += (
-            "<div style='display:flex;align-items:center;gap:10px;margin-bottom:8px;'>"
-            f"<span style='font-size:11px;font-family:monospace;color:#c0c0d0;flex:1;'>{domain}</span>"
-            f"<span style='background:{dc}22;border:1px solid {dc}55;color:{dc};"
-            f"padding:2px 8px;border-radius:4px;font-size:11px;font-family:monospace;flex-shrink:0;'>"
-            f"{'🤖' if is_ai else '✍️'} {label} ({conf:.0f}%)</span>"
-            "</div>"
-        )
-
-    html = (
-        "<div style='background:#0a0a18;border:1px solid #1e1e3e;border-radius:10px;"
-        "padding:18px 20px;margin-top:16px;'>"
-        "<div style='font-size:10px;font-family:monospace;color:#444;"
-        "letter-spacing:2px;margin-bottom:14px;'>AI CONTENT DETECTION</div>"
-        + rows +
-        "</div>"
-    )
-    st.markdown(html, unsafe_allow_html=True)
-
-
-def render_identity_section(api_base: str):
-    """Identity Verification Section"""
-    st.markdown("""
-    <div style='background:#0a0a18;border:1px solid #1e1e3e;border-radius:12px;padding:20px 24px;margin-top:24px;'>
-        <div style='font-size:10px;font-family:monospace;color:#444;letter-spacing:2px;margin-bottom:4px;'>IDENTITY VERIFICATION</div>
-        <div style='font-size:13px;color:#c0c0d0;margin-bottom:2px;'>Verify a person, organization, email, or website</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    with st.expander("🔍 Run Identity Verification", expanded=False):
-        col1, col2 = st.columns(2)
-        with col1:
-            id_name  = st.text_input("Name or Organization", placeholder="e.g. Elon Musk / Reuters")
-            id_email = st.text_input("Email Address", placeholder="e.g. contact@example.com")
-        with col2:
-            id_url   = st.text_input("Website or Profile URL", placeholder="e.g. https://reuters.com")
-            id_desc  = st.text_area("Additional Context", placeholder="Any extra info about this identity...", height=68)
-
-        if st.button("🛡 Verify Identity", use_container_width=True):
-            if not any([id_name, id_email, id_url, id_desc]):
-                st.warning("Please provide at least one field to verify.")
-            else:
-                with st.spinner("Analyzing identity..."):
-                    try:
-                        resp = http_requests.post(
-                            f"{api_base}/api/identity-verify",
-                            json={"name": id_name, "email": id_email,
-                                  "url": id_url, "description": id_desc},
-                            timeout=30
-                        )
-                        if resp.status_code == 200:
-                            st.session_state["identity_result"] = resp.json()
-                        else:
-                            st.error(f"Verification failed: {resp.text}")
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-
-
-def render_trust_score(result: dict):
-    """Render the identity trust score card"""
-    score  = result.get("trust_score", 0)
-    badge  = result.get("badge", "UNKNOWN")
-    summary = result.get("summary", "")
-    checks = result.get("checks", {})
-    profile = checks.get("profile", {})
-    persona = profile.get("persona_type", "")
-    risk    = profile.get("risk_level", "")
-    interesting = profile.get("interesting_fact", "")
-    red_flags   = result.get("red_flags", [])
-    pos_signals = result.get("positive_signals", [])
-    recs        = result.get("recommendations", [])
-
-    if score >= 75:
-        score_color, badge_bg = "#00b894", "#00b89422"
-    elif score >= 50:
-        score_color, badge_bg = "#fdcb6e", "#fdcb6e22"
-    else:
-        score_color, badge_bg = "#e17055", "#e1705522"
-
-    # Score ring + badge
-    ring_pct = score
-    ring_html = (
-        "<div style='display:flex;align-items:center;gap:24px;background:#0a0a18;"
-        "border:1px solid #1e1e3e;border-radius:12px;padding:20px 24px;margin-bottom:12px;'>"
-        "<div style='position:relative;width:90px;height:90px;flex-shrink:0;'>"
-        f"<svg width='90' height='90' viewBox='0 0 90 90'>"
-        "<circle cx='45' cy='45' r='38' fill='none' stroke='#1e1e3e' stroke-width='8'/>"
-        f"<circle cx='45' cy='45' r='38' fill='none' stroke='{score_color}' stroke-width='8'"
-        f" stroke-dasharray='{ring_pct * 2.387} 238.7'"
-        " stroke-linecap='round' transform='rotate(-90 45 45)'/>"
-        f"<text x='45' y='50' text-anchor='middle' font-size='20' font-weight='bold'"
-        f" fill='{score_color}' font-family='monospace'>{score}</text>"
-        "</svg></div>"
-        "<div style='flex:1;'>"
-        f"<div style='background:{badge_bg};border:1px solid {score_color}44;"
-        f"color:{score_color};padding:4px 14px;border-radius:6px;"
-        f"font-size:13px;font-family:monospace;font-weight:bold;display:inline-block;"
-        f"margin-bottom:8px;'>{badge}</div>"
-        f"<div style='font-size:11px;color:#888;font-family:monospace;margin-bottom:4px;'>"
-        f"Persona: {persona} &nbsp;|&nbsp; Risk: {risk}</div>"
-        f"<div style='font-size:12px;color:#c0c0d0;'>{summary}</div>"
-        "</div></div>"
-    )
-    st.markdown(ring_html, unsafe_allow_html=True)
-
-    if interesting:
-        st.markdown(
-            f"<div style='background:#12122a;border-left:3px solid #6c63ff;"
-            f"padding:10px 16px;border-radius:0 8px 8px 0;font-size:12px;"
-            f"color:#a29bfe;margin-bottom:12px;'>💡 {interesting}</div>",
-            unsafe_allow_html=True)
-
-    # Red flags & positive signals
-    col1, col2 = st.columns(2)
-    with col1:
-        if red_flags:
-            flags_html = "<div style='background:#0a0a18;border:1px solid #e1705533;border-radius:8px;padding:14px;'>"
-            flags_html += "<div style='font-size:10px;font-family:monospace;color:#e17055;letter-spacing:1px;margin-bottom:8px;'>⚠ RED FLAGS</div>"
-            for f in red_flags:
-                flags_html += f"<div style='font-size:11px;color:#e17055;margin-bottom:4px;font-family:monospace;'>• {f}</div>"
-            flags_html += "</div>"
-            st.markdown(flags_html, unsafe_allow_html=True)
-    with col2:
-        if pos_signals:
-            sig_html = "<div style='background:#0a0a18;border:1px solid #00b89433;border-radius:8px;padding:14px;'>"
-            sig_html += "<div style='font-size:10px;font-family:monospace;color:#00b894;letter-spacing:1px;margin-bottom:8px;'>✓ POSITIVE SIGNALS</div>"
-            for s in pos_signals:
-                sig_html += f"<div style='font-size:11px;color:#00b894;margin-bottom:4px;font-family:monospace;'>• {s}</div>"
-            sig_html += "</div>"
-            st.markdown(sig_html, unsafe_allow_html=True)
-
-    # Per-check breakdown
-    for check_name, check in checks.items():
-        if check_name == "profile":
-            continue
-        cscore = check.get("score", 0)
-        clabel = check.get("label", "")
-        cvalue = check.get("value", "")
-        cc = "#00b894" if cscore >= 70 else ("#fdcb6e" if cscore >= 40 else "#e17055")
-        check_html = (
-            f"<div style='background:#0a0a18;border:1px solid #1e1e3e;border-radius:8px;"
-            f"padding:12px 16px;margin-top:10px;display:flex;align-items:center;gap:12px;'>"
-            f"<div style='font-size:10px;font-family:monospace;color:#888;min-width:80px;'>{check_name.upper()}</div>"
-            f"<div style='font-size:11px;color:#c0c0d0;flex:1;font-family:monospace;'>{cvalue}</div>"
-            f"<div style='background:{cc}22;border:1px solid {cc}55;color:{cc};"
-            f"padding:2px 10px;border-radius:4px;font-size:11px;font-family:monospace;'>{clabel} ({cscore})</div>"
+            f"<div style='display:flex;align-items:center;gap:12px;margin-bottom:12px;'>"
+            f"<div style='width:6px;height:6px;border-radius:50%;background:{dot};flex-shrink:0;box-shadow:0 0 6px {dot}88;'></div>"
+            f"<div style='font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'>{domain}</div>"
+            f"<div style='font-family:var(--font-mono);font-size:10px;color:{dot};background:{dot}12;border:1px solid {dot}33;padding:1px 8px;border-radius:2px;flex-shrink:0;'>{dl}</div>"
+            f"</div>"
+            f"<div style='position:relative;height:2px;background:var(--border);border-radius:1px;margin-bottom:14px;'>"
+            f"<div style='position:absolute;left:0;top:0;height:100%;width:{pct}%;background:linear-gradient(90deg,var(--border-lit),{dot}66);border-radius:1px;'></div>"
+            f"<div style='position:absolute;top:50%;left:{pct}%;transform:translate(-50%,-50%);width:8px;height:8px;border-radius:50%;background:{dot};border:2px solid var(--bg-void);box-shadow:0 0 8px {dot};'></div>"
             f"</div>"
         )
-        st.markdown(check_html, unsafe_allow_html=True)
+    st.markdown(
+        f"<div style='background:var(--bg-deep);border:1px solid var(--border);border-radius:6px;padding:16px 18px;margin-top:14px;'>"
+        f"{label('Source Timeline')}"
+        f"{rows}"
+        f"<div style='display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-top:4px;'>  <span>OLDER</span><span>RECENT</span></div>"
+        f"</div>",
+        unsafe_allow_html=True)
 
-    # Recommendations
-    if recs:
-        st.markdown("<div style='margin-top:14px;font-size:10px;font-family:monospace;color:#444;letter-spacing:1px;'>RECOMMENDATIONS</div>", unsafe_allow_html=True)
-        for r in recs:
-            st.markdown(f"<div style='font-size:11px;color:#a29bfe;padding:4px 0;font-family:monospace;'>→ {r}</div>", unsafe_allow_html=True)
+def render_ai_detection(input_det):
+    if not input_det: return
+    lbl = input_det.get("label","Unknown")
+    conf = input_det.get("confidence", 0)
+    is_ai = input_det.get("is_ai_generated", False)
+    reason = input_det.get("reasoning","")
+    dc = "var(--red)" if (is_ai and conf >= 60) else ("var(--green)" if "Human" in lbl else "var(--text-secondary)")
+    st.markdown(
+        f"<div style='background:var(--bg-deep);border:1px solid var(--border);border-radius:6px;padding:14px 18px;margin-top:12px;'>"
+        f"{label('AI Content Analysis')}"
+        f"<div style='display:flex;align-items:center;gap:10px;margin-bottom:8px;'>"
+        f"<div style='font-family:var(--font-mono);font-size:10px;color:var(--text-muted);'>INPUT</div>"
+        f"<div style='background:{dc}18;border:1px solid {dc}44;color:{dc};padding:2px 10px;border-radius:3px;font-family:var(--font-mono);font-size:10px;'>{'AI' if is_ai else 'HUMAN'} · {lbl.upper()} · {conf:.0f}%</div>"
+        f"</div>"
+        f"<div style='font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);line-height:1.6;'>{reason}</div>"
+        f"</div>",
+        unsafe_allow_html=True)
 
-
-def render_pdf_download(fact_results: list, identity_result: dict = None):
-    """Render PDF download button"""
+def render_pdf_download(fact_results, identity_result=None):
     try:
-        import sys, os
-        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         from backend.utils.pdf_exporter import build_report_pdf
         pdf_bytes = build_report_pdf(fact_results, identity_result)
         b64 = base64.b64encode(pdf_bytes).decode()
-        from datetime import datetime
-        filename = f"verifai_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-        href = (
+        filename = f"verifai_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        st.markdown(
             f'<a href="data:application/pdf;base64,{b64}" download="{filename}" '
-            f'style="display:block;text-align:center;background:linear-gradient(135deg,#6c63ff,#a29bfe);'
-            f'color:white;padding:12px 24px;border-radius:8px;text-decoration:none;'
-            f'font-family:monospace;font-size:13px;font-weight:bold;margin-top:16px;">'
-            f'📄 Download Full Report as PDF</a>'
-        )
-        st.markdown(href, unsafe_allow_html=True)
+            f'style="display:block;text-align:center;background:var(--bg-card);'
+            f'border:1px solid var(--accent-dim);color:var(--accent);padding:10px 24px;'
+            f'border-radius:4px;text-decoration:none;font-family:var(--font-mono);'
+            f'font-size:11px;letter-spacing:1px;margin-top:16px;'
+            f'transition:all 0.2s;">EXPORT REPORT AS PDF</a>',
+            unsafe_allow_html=True)
     except Exception as e:
-        st.warning(f"PDF export unavailable: {e}")
-        st.caption("Run: pip install reportlab")
+        st.caption(f"PDF unavailable: {e}")
+
+def render_trust_ring(score, input_value, badge_text, risk, persona):
+    tc = "#00ff88" if score >= 75 else ("#ffaa00" if score >= 50 else "#ff3366")
+    dash = score * 2.199
+    st.markdown(
+        f"<div style='display:flex;align-items:center;gap:24px;background:var(--bg-deep);"
+        f"border:1px solid var(--border-lit);border-radius:8px;padding:20px 24px;margin-bottom:16px;'>"
+        f"<svg width='90' height='90' viewBox='0 0 90 90' style='flex-shrink:0;'>"
+        f"<circle cx='45' cy='45' r='35' fill='none' stroke='var(--border)' stroke-width='6'/>"
+        f"<circle cx='45' cy='45' r='35' fill='none' stroke='{tc}' stroke-width='6'"
+        f" stroke-dasharray='{dash} 219.9' stroke-linecap='round' transform='rotate(-90 45 45)'"
+        f" style='filter:drop-shadow(0 0 6px {tc}88)'/>"
+        f"<text x='45' y='49' text-anchor='middle' font-size='18' font-weight='700'"
+        f" fill='{tc}' font-family='JetBrains Mono,monospace'>{score}</text>"
+        f"</svg>"
+        f"<div>"
+        f"<div style='font-size:22px;font-weight:600;color:var(--text-primary);font-family:var(--font-ui);margin-bottom:8px;'>{input_value}</div>"
+        f"<div style='display:flex;align-items:center;gap:8px;margin-bottom:6px;'>"
+        f"<span style='background:{tc}18;border:1px solid {tc}44;color:{tc};padding:3px 12px;"
+        f"border-radius:3px;font-family:var(--font-mono);font-size:10px;letter-spacing:1px;"
+        f"font-weight:700;'>{badge_text}</span>"
+        f"<span style='color:var(--text-muted);font-family:var(--font-mono);font-size:10px;'>RISK: {risk.upper()}</span>"
+        f"</div>"
+        f"<div style='font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:0.5px;'>PERSONA: {persona.upper()}</div>"
+        f"</div></div>",
+        unsafe_allow_html=True)
 
 
-# Title
-st.title("VerifAI: Digital Trust Verification Platform")
-st.markdown("### Multi-Agent AI System for Fact-Checking & Identity Verification")
-st.markdown("---")
-
-# Sidebar
+# ── Sidebar ───────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.header("System Status")
+    st.markdown(
+        "<div style='font-family:var(--font-mono);font-size:18px;font-weight:700;"
+        "color:var(--accent);letter-spacing:2px;margin-bottom:2px;'>VERIFAI</div>"
+        "<div style='font-family:var(--font-mono);font-size:9px;color:var(--text-muted);"
+        "letter-spacing:3px;margin-bottom:24px;'>DIGITAL TRUST PLATFORM</div>",
+        unsafe_allow_html=True)
+
+    # User info + logout
+    user = st.session_state.get("current_user")
+    if user:
+        st.markdown(
+            f"<div style='background:var(--bg-card);border:1px solid var(--border-lit);"
+            f"border-radius:6px;padding:12px;margin-bottom:16px;'>"
+            f"<div style='font-family:var(--font-mono);font-size:9px;color:var(--text-muted);"
+            f"letter-spacing:2px;margin-bottom:4px;'>SIGNED IN AS</div>"
+            f"<div style='font-family:var(--font-mono);font-size:13px;color:var(--accent);"
+            f"font-weight:600;'>{user['name']}</div>"
+            f"<div style='font-family:var(--font-mono);font-size:10px;color:var(--text-muted);'>"
+            f"{user['email']}</div>"
+            f"</div>",
+            unsafe_allow_html=True)
+        if st.button("SIGN OUT", key="logout_btn", use_container_width=True):
+            from backend.auth.auth_manager import logout_session
+            logout_session(st.session_state.get("auth_token"))
+            st.session_state["auth_token"]   = None
+            st.session_state["current_user"] = None
+            st.rerun()
+
+    st.markdown(f"<div style='font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:2px;margin-bottom:10px;'>SYSTEM STATUS</div>", unsafe_allow_html=True)
+
     try:
         r = requests.get(f"{API_URL}/health", timeout=2)
         if r.status_code == 200:
-            st.success("Backend: Online")
-            health = r.json()
-            st.info(f"ChromaDB: {health.get('chroma', 'unknown')}")
-            st.info(f"Neo4j: {health.get('neo4j', 'optional')}")
+            h = r.json()
+            for svc, status in [("BACKEND", "ONLINE"), ("CHROMADB", h.get('chroma','—').upper()), ("NEO4J", h.get('neo4j','—').upper())]:
+                c = "var(--green)" if "online" in status.lower() or "connect" in status.lower() else "var(--amber)"
+                st.markdown(f"<div style='display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--bg-card);border:1px solid var(--border);border-radius:4px;margin-bottom:4px;'><span style='font-family:var(--font-mono);font-size:10px;color:var(--text-secondary);'>{svc}</span><span style='font-family:var(--font-mono);font-size:9px;color:{c};letter-spacing:1px;'>{status}</span></div>", unsafe_allow_html=True)
         else:
-            st.error("Backend: Offline")
+            st.markdown(f"<div style='padding:8px 10px;background:var(--bg-card);border:1px solid var(--red-dim);border-radius:4px;font-family:var(--font-mono);font-size:10px;color:var(--red);'>BACKEND OFFLINE</div>", unsafe_allow_html=True)
     except:
-        st.error("Backend: Not Running")
-        st.warning("Run: python run_demo.py")
+        st.markdown(f"<div style='padding:8px 10px;background:var(--bg-card);border:1px solid var(--red-dim);border-radius:4px;font-family:var(--font-mono);font-size:10px;color:var(--red);'>BACKEND OFFLINE</div>", unsafe_allow_html=True)
 
-    st.markdown("---")
+    st.markdown("<div style='margin:20px 0;border-top:1px solid var(--border);'></div>", unsafe_allow_html=True)
+
     try:
         r = requests.get(f"{API_URL}/usage", timeout=2)
         if r.status_code == 200:
-            usage = r.json()
-            st.metric("Total Requests", usage['total_requests'])
-            st.metric("Total Cost", f"${usage['total_cost']:.4f}")
-            st.metric("Remaining Credit", f"${usage['remaining_credit']:.2f}")
+            u = r.json()
+            for lbl_text, val in [("REQUESTS", str(u.get('total_requests',0))), ("COST", f"${u.get('total_cost',0):.4f}"), ("CREDIT", f"${u.get('remaining_credit',0):.2f}")]:
+                st.markdown(f"<div style='margin-bottom:12px;'><div style='font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1.5px;margin-bottom:3px;'>{lbl_text}</div><div style='font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text-primary);'>{val}</div></div>", unsafe_allow_html=True)
     except:
         pass
 
-    st.markdown("---")
-    st.markdown("**Demo Mode:** Fact-Checking")
-    st.markdown("*Identity verification coming soon*")
+    st.markdown("<div style='margin:20px 0;border-top:1px solid var(--border);'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1.5px;'>MULTI-AGENT RAG SYSTEM</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-top:4px;'>CLAUDE AI · DUCKDUCKGO · CHROMADB</div>", unsafe_allow_html=True)
 
-# Tabs
-tab1, tab2 = st.tabs(["Fact-Check Article", "Verify Identity (Phase 2)"])
+    st.markdown("<div style='margin:20px 0;border-top:1px solid var(--border);'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1.5px;margin-bottom:10px;'>DISPLAY THEME</div>", unsafe_allow_html=True)
 
+    col_d, col_l = st.columns(2)
+    with col_d:
+        if st.button("DARK", key="theme_dark", use_container_width=True):
+            st.session_state["theme"] = "dark"
+            st.rerun()
+    with col_l:
+        if st.button("LIGHT", key="theme_light", use_container_width=True):
+            st.session_state["theme"] = "light"
+            st.rerun()
+
+    # Show current theme
+    _cur = st.session_state.get("theme", "dark")
+    st.markdown(
+        f"<div style='font-family:var(--font-mono);font-size:9px;color:var(--accent);"
+        f"text-align:center;margin-top:6px;letter-spacing:1px;'>"
+        f"ACTIVE: {_cur.upper()}</div>",
+        unsafe_allow_html=True)
+
+
+# ── Header ────────────────────────────────────────────────────────────────
+st.markdown(
+    "<div style='margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--border);'>"
+    "<div style='font-family:var(--font-mono);font-size:26px;font-weight:700;color:var(--accent);"
+    "letter-spacing:3px;'>VERIFAI</div>"
+    "<div style='font-family:var(--font-mono);font-size:11px;color:var(--text-muted);letter-spacing:2px;margin-top:4px;'>"
+    "DIGITAL TRUST VERIFICATION PLATFORM · MULTI-AGENT AI SYSTEM</div>"
+    "</div>",
+    unsafe_allow_html=True)
+
+tab1, tab2 = st.tabs(["FACT CHECK", "IDENTITY"])
+
+# ══════════════════════════════════════════════════════════════════════════
+# TAB 1 — FACT CHECKER
+# ══════════════════════════════════════════════════════════════════════════
 with tab1:
-    st.header("Fact-Check Claims & Articles")
-    st.markdown("Enter a claim, question, or paste an article. Supports typos and informal language.")
+    col_input, col_config = st.columns([3, 1], gap="large")
 
-    with st.expander("Example Claims (click to load)"):
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Fake Hurricane Claim"):
-                st.session_state.fact_check_input = "Hurricane Layla struck Dubai on September 15, 2024, causing $2 billion in damages."
-            if st.button("Climate Fact"):
-                st.session_state.fact_check_input = "Global temperatures have increased by approximately 1.1C since pre-industrial times."
-        with col2:
-            if st.button("Sports Claim"):
-                st.session_state.fact_check_input = "Messi won the 2022 World Cup with Argentina"
-            if st.button("Space Fact"):
-                st.session_state.fact_check_input = "James Webb Space Telescope launched in December 2021"
+    with col_input:
+        st.markdown(label("INPUT — CLAIM OR ARTICLE"), unsafe_allow_html=True)
+        examples = {
+            "Select example...": "",
+            "Climate Science": "Scientists say global temperatures have risen 1.1°C since pre-industrial times",
+            "COVID-19 Origin": "The COVID-19 pandemic spread in 2019 from Wuhan, China",
+            "Tech": "Apple became the first company to reach $3 trillion market cap",
+        }
+        selected = st.selectbox("", list(examples.keys()), label_visibility="collapsed")
+        default = examples.get(selected, "")
+        user_input = st.text_area("", value=default, height=130,
+            placeholder="Enter claim, question, or paste a full article…",
+            label_visibility="collapsed")
 
-    claim_text = st.text_area(
-        "Enter claim, question, or article to verify:",
-        value=st.session_state.get('fact_check_input', ''),
-        height=150,
-        placeholder="Example: 'did elon musk found tesla?' or paste a full article..."
-    )
+    with col_config:
+        st.markdown(label("CONFIGURATION"), unsafe_allow_html=True)
+        language = st.selectbox("", ["English","Arabic","French","Spanish","German",
+            "Italian","Portuguese","Russian","Chinese","Japanese","Turkish"],
+            label_visibility="collapsed")
+        extract = st.checkbox("Auto-extract claims", value=True)
+        st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
+        run_btn = st.button("▶  ANALYZE", type="primary", use_container_width=True)
 
-    col_a, col_b = st.columns([2, 1])
-    with col_a:
-        extract_claims = st.checkbox(
-            "Auto-extract claims (recommended for articles)",
-            value=True,
-            help="Uses Claude to intelligently extract factual claims from your text"
-        )
-    with col_b:
-        language = st.selectbox(
-            "Search language",
-            ["English", "Arabic", "French", "Spanish", "German",
-             "Italian", "Portuguese", "Russian", "Chinese", "Japanese", "Turkish"],
-            index=0,
-            help="Search for evidence in this language. Results are translated back to English."
-        )
-
-    if st.button("Verify Claim", type="primary", use_container_width=True):
-        if not claim_text or len(claim_text.strip()) < 3:
-            st.error("Please enter a claim")
+    if run_btn:
+        if not user_input.strip():
+            st.warning("Enter a claim to verify.")
         else:
-            with st.spinner("Searching web and analyzing with AI..."):
+            with st.spinner(""):
+                st.markdown(
+                    "<div style='font-family:var(--font-mono);font-size:11px;"
+                    "color:var(--accent);letter-spacing:1px;margin:8px 0;'>PROCESSING…</div>",
+                    unsafe_allow_html=True)
                 try:
-                    response = requests.post(
-                        f"{API_URL}/fact-check",
-                        json={"text": claim_text, "extract_claims": extract_claims, "language": language},
-                        timeout=120
-                    )
+                    resp = requests.post(f"{API_URL}/fact-check",
+                        json={"text": user_input, "extract_claims": extract, "language": language},
+                        timeout=180)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        st.session_state["last_response"] = data
+                        overall = data.get("overall_verdict","UNKNOWN")
+                        conf    = data.get("confidence", 0)
+                        ms      = data.get("processing_time_ms", 0)
+                        vc      = verdict_color(overall)
 
-                    if response.status_code == 200:
-                        result = response.json()
-                        st.success("Analysis Complete!")
+                        # ── Overall verdict bar ──
+                        st.markdown(
+                            f"<div style='background:var(--bg-deep);border:1px solid {vc}33;"
+                            f"border-left:3px solid {vc};border-radius:0 6px 6px 0;"
+                            f"padding:14px 20px;margin:16px 0;display:flex;align-items:center;gap:20px;'>"
+                            f"<div style='font-family:var(--font-mono);font-size:18px;font-weight:700;color:{vc};letter-spacing:2px;'>{overall}</div>"
+                            f"<div style='width:1px;height:30px;background:var(--border);'></div>"
+                            f"<div><div style='font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1.5px;'>CONFIDENCE</div>"
+                            f"<div style='font-family:var(--font-mono);font-size:16px;color:var(--text-primary);'>{conf:.1f}%</div></div>"
+                            f"<div style='width:1px;height:30px;background:var(--border);'></div>"
+                            f"<div><div style='font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1.5px;'>PROCESSING</div>"
+                            f"<div style='font-family:var(--font-mono);font-size:16px;color:var(--text-primary);'>{ms:.0f}ms</div></div>"
+                            f"<div style='width:1px;height:30px;background:var(--border);'></div>"
+                            f"<div><div style='font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1.5px;'>CLAIMS</div>"
+                            f"<div style='font-family:var(--font-mono);font-size:16px;color:var(--text-primary);'>{data.get('claims_analyzed',0)}</div></div>"
+                            f"</div>",
+                            unsafe_allow_html=True)
 
-                        st.markdown("### Overall Verdict")
-                        verdict = result['overall_verdict']
-                        confidence = result['confidence']
+                        # ── Per-claim results ──
+                        st.markdown(label("DETAILED ANALYSIS"), unsafe_allow_html=True)
 
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.metric("Verdict", verdict)
-                        with col2:
-                            st.metric("Confidence", f"{confidence:.1f}%")
-                        with col3:
-                            st.metric("Processing Time", f"{result['processing_time_ms']:.0f}ms")
+                        for idx, cr in enumerate(data.get("detailed_results",[]), 1):
+                            cv   = cr.get("verdict","UNKNOWN")
+                            cc   = verdict_color(cv)
+                            conf2 = cr.get("confidence",0)
+                            claim_text = cr.get("claim_text","")
+                            reasoning  = cr.get("reasoning","")
+                            sources    = cr.get("sources",[])
+                            src_dates  = cr.get("source_dates",[])
 
-                        st.markdown("---")
+                            with st.expander(f"[ {idx:02d} ]  {claim_text[:90]}…", expanded=True):
+                                st.markdown(
+                                    f"<div style='background:{cc}0d;border:1px solid {cc}33;"
+                                    f"border-left:3px solid {cc};border-radius:0 4px 4px 0;"
+                                    f"padding:8px 14px;margin-bottom:12px;display:flex;"
+                                    f"align-items:center;gap:12px;'>"
+                                    f"<span style='font-family:var(--font-mono);font-size:12px;"
+                                    f"font-weight:700;color:{cc};letter-spacing:1px;'>{cv}</span>"
+                                    f"<span style='font-family:var(--font-mono);font-size:11px;"
+                                    f"color:var(--text-muted);'>{conf2:.1f}% confidence</span>"
+                                    f"</div>",
+                                    unsafe_allow_html=True)
 
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.metric("Claims Analyzed", result['claims_analyzed'])
-                        with col2:
-                            st.metric("Claims Refuted", result['claims_refuted'])
-                        with col3:
-                            st.metric("Claims Supported", result['claims_supported'])
+                                st.progress(conf2 / 100)
 
-                        st.markdown("---")
-                        st.markdown("### Detailed Claim Analysis")
+                                if reasoning:
+                                    st.markdown(
+                                        f"<div style='background:var(--bg-deep);border:1px solid var(--border);"
+                                        f"border-radius:4px;padding:14px;margin:12px 0;"
+                                        f"font-family:var(--font-mono);font-size:12px;"
+                                        f"color:var(--text-secondary);line-height:1.7;'>{reasoning}</div>",
+                                        unsafe_allow_html=True)
 
-                        for i, claim_result in enumerate(result['detailed_results'], 1):
-                            with st.expander(f"Claim {i}: {claim_result['claim_text'][:80]}...", expanded=(i == 1)):
+                                if sources:
+                                    st.markdown(label("SOURCES"), unsafe_allow_html=True)
+                                    for si, src in enumerate(sources):
+                                        st.markdown(
+                                            f"<div style='font-family:var(--font-mono);font-size:12px;"
+                                            f"color:var(--accent);margin-bottom:6px;'>"
+                                            f"<a href='{src}' target='_blank' style='color:var(--accent);"
+                                            f"text-decoration:none;'>↗ {src[:80]}</a></div>",
+                                            unsafe_allow_html=True)
 
-                                v = claim_result['verdict']
-                                if v == 'REFUTED':
-                                    st.error(f"**Verdict:** {v}")
-                                elif v == 'SUPPORTED':
-                                    st.success(f"**Verdict:** {v}")
-                                else:
-                                    st.warning(f"**Verdict:** {v}")
+                                render_source_timeline(sources, src_dates, cv)
+                                render_ai_detection(cr.get("input_ai_detection",{}))
 
-                                st.progress(claim_result['confidence'] / 100)
-                                st.caption(f"Confidence: {claim_result['confidence']:.1f}%")
+                        with st.expander("METADATA"):
+                            st.json({"task_id": data.get("task_id"), "timestamp": data.get("timestamp"), "language": language})
 
-                                st.markdown("**Reasoning:**")
-                                st.info(claim_result['reasoning'])
+                        render_pdf_download(data.get("detailed_results",[]))
 
-                                if claim_result.get('sources'):
-                                    st.markdown("**Sources:**")
-                                    src_detections = claim_result.get('source_ai_detection', [])
-                                    for si, source in enumerate(claim_result['sources']):
-                                        det = src_detections[si] if si < len(src_detections) else {}
-                                        badge = ai_badge(det)
-                                        st.markdown(f"- [{source}]({source}) &nbsp;{badge}", unsafe_allow_html=True)
-
-                                    render_source_timeline(
-                                        sources=claim_result.get('sources', []),
-                                        source_dates=claim_result.get('source_dates', []),
-                                        verdict=claim_result['verdict']
-                                    )
-                                    render_ai_section(
-                                        input_detection=claim_result.get('input_ai_detection', {}),
-                                        source_detections=claim_result.get('source_ai_detection', []),
-                                        sources=claim_result.get('sources', [])
-                                    )
-
-                                if claim_result.get('flags'):
-                                    st.caption(f"Flags: {', '.join(claim_result['flags'])}")
-
-                        with st.expander("Task Metadata"):
-                            st.json({
-                                "task_id": result['task_id'],
-                                "timestamp": result['timestamp'],
-                                "processing_time_ms": result['processing_time_ms']
-                            })
                     else:
-                        st.error(f"API Error: {response.status_code}")
-                        st.code(response.text)
+                        st.markdown(f"<div style='color:var(--red);font-family:var(--font-mono);font-size:12px;'>API ERROR {resp.status_code}</div>", unsafe_allow_html=True)
+                        st.code(resp.text)
 
                 except requests.exceptions.Timeout:
-                    st.error("Request timed out. Try a shorter claim.")
+                    st.markdown("<div style='color:var(--red);font-family:var(--font-mono);font-size:12px;'>REQUEST TIMEOUT — Try a shorter claim</div>", unsafe_allow_html=True)
                 except requests.exceptions.ConnectionError:
-                    st.error("Cannot connect to backend. Is it running?")
+                    st.markdown("<div style='color:var(--red);font-family:var(--font-mono);font-size:12px;'>CONNECTION ERROR — Backend offline</div>", unsafe_allow_html=True)
                 except Exception as e:
-                    st.error(f"Unexpected error: {str(e)}")
+                    st.markdown(f"<div style='color:var(--red);font-family:var(--font-mono);font-size:12px;'>ERROR: {e}</div>", unsafe_allow_html=True)
 
+
+# ══════════════════════════════════════════════════════════════════════════
+# TAB 2 — IDENTITY
+# ══════════════════════════════════════════════════════════════════════════
 with tab2:
-    st.header("Identity Verification")
-    st.info("Coming in Phase 2")
-    st.markdown("**Planned Features:**")
-    st.markdown("- LinkedIn/social media profile verification")
-    st.markdown("- Reverse image search & deepfake detection")
-    st.markdown("- Data breach checking")
-    st.markdown("- Credential validation")
+    id_tab1, id_tab2 = st.tabs(["SEARCH BY NAME", "PHOTO IDENTIFICATION"])
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.text_input("Full Name", disabled=True, placeholder="John Doe")
-        st.text_input("Email", disabled=True, placeholder="john@example.com")
-    with col2:
-        st.file_uploader("Upload Resume (PDF)", disabled=True)
-        st.file_uploader("Upload Profile Photo", disabled=True)
-    st.button("Verify Identity", disabled=True)
+    # ── Name Search ───────────────────────────────────────────────────────
+    with id_tab1:
+        st.markdown(label("SUBJECT NAME"), unsafe_allow_html=True)
+        id_name = st.text_input("", placeholder="e.g. Elon Musk, Marco Rubio, Reuters…",
+                                 label_visibility="collapsed", key="id_name_v4")
 
-st.markdown("---")
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.caption("Zero-Trust Architecture")
-with col2:
-    st.caption("Multi-Agent System")
-with col3:
-    st.caption("RAG-Powered Verification")
+        if st.button("▶  SEARCH ACROSS PLATFORMS", key="search_platforms_btn", use_container_width=True):
+            if not id_name.strip():
+                st.warning("Enter a name.")
+            else:
+                with st.spinner(""):
+                    st.markdown(
+                        f"<div style='font-family:var(--font-mono);font-size:11px;color:var(--accent);letter-spacing:1px;margin:8px 0;'>SCANNING PLATFORMS…</div>",
+                        unsafe_allow_html=True)
+                    try:
+                        resp = requests.post(f"{API_URL}/identity-search-platforms",
+                            json={"name": id_name}, timeout=60)
+                        if resp.status_code == 200:
+                            st.session_state["platform_profiles"] = resp.json().get("profiles",[])
+                            st.session_state["identity_result"]   = None
+                        else:
+                            st.error(resp.text)
+                    except Exception as e:
+                        st.error(str(e))
+
+        if st.session_state.get("platform_profiles") is not None:
+            profiles = st.session_state["platform_profiles"]
+            if not profiles:
+                st.markdown(
+                    "<div style='background:var(--bg-card);border:1px solid var(--border);"
+                    "border-radius:6px;padding:16px;font-family:var(--font-mono);font-size:12px;"
+                    "color:var(--text-muted);'>NO VERIFIED PROFILES FOUND — Try a different spelling or add more context.</div>",
+                    unsafe_allow_html=True)
+            else:
+                st.markdown(
+                    f"<div style='font-family:var(--font-mono);font-size:10px;color:var(--accent);"
+                    f"letter-spacing:2px;margin-bottom:12px;'>{len(profiles)} VERIFIED PROFILE(S) FOUND</div>",
+                    unsafe_allow_html=True)
+                cols = st.columns(min(len(profiles), 3))
+                for i, p in enumerate(profiles):
+                    with cols[i % min(len(profiles), 3)]:
+                        color   = p.get("color","#7a9bb5")
+                        plat    = p.get("platform","")
+                        icon    = p.get("icon","")
+                        url     = p.get("url","")
+                        title   = p.get("title","")
+                        snippet = p.get("snippet","")
+                        st.markdown(
+                            f"<div style='background:var(--bg-card);border:1px solid {color}33;"
+                            f"border-top:2px solid {color};border-radius:6px;padding:14px;"
+                            f"margin-bottom:8px;'>"
+                            f"<div style='font-family:var(--font-mono);font-size:10px;color:{color};"
+                            f"letter-spacing:1px;font-weight:700;margin-bottom:8px;'>{icon} {plat.upper()}</div>"
+                            f"<div style='font-size:12px;color:var(--text-primary);font-weight:500;"
+                            f"margin-bottom:6px;line-height:1.4;'>{title[:55]}</div>"
+                            f"<div style='font-family:var(--font-mono);font-size:10px;color:var(--text-muted);"
+                            f"margin-bottom:10px;line-height:1.5;'>{snippet[:90]}…</div>"
+                            f"<a href='{url}' target='_blank' style='font-family:var(--font-mono);"
+                            f"font-size:10px;color:{color};text-decoration:none;letter-spacing:1px;'>"
+                            f"↗ VIEW PROFILE</a></div>",
+                            unsafe_allow_html=True)
+                        if st.button("LOAD FULL PROFILE", key=f"load_{i}"):
+                            with st.spinner(""):
+                                try:
+                                    r2 = requests.post(f"{API_URL}/identity-verify-name",
+                                        json={"name": id_name, "context": f"{plat} {snippet[:100]}"},
+                                        timeout=60)
+                                    if r2.status_code == 200:
+                                        st.session_state["identity_result"]   = r2.json()
+                                        st.session_state["platform_profiles"] = None
+                                        st.rerun()
+                                    else:
+                                        st.error(r2.text)
+                                except Exception as e:
+                                    st.error(str(e))
+
+    # ── Photo ID ──────────────────────────────────────────────────────────
+    with id_tab2:
+        st.markdown(
+            f"<div style='background:var(--bg-card);border:1px solid var(--amber-dim);"
+            f"border-left:3px solid var(--amber);border-radius:0 6px 6px 0;"
+            f"padding:10px 16px;margin-bottom:16px;font-family:var(--font-mono);"
+            f"font-size:11px;color:var(--amber);'>"
+            f"⚠  PHOTO IDENTIFICATION WORKS FOR PUBLIC FIGURES ONLY (politicians, celebrities, athletes, etc.)</div>",
+            unsafe_allow_html=True)
+
+        uploaded = st.file_uploader("", type=["jpg","jpeg","png","webp"], label_visibility="collapsed", key="id_photo")
+        if st.button("▶  IDENTIFY & VERIFY", key="id_photo_btn"):
+            if not uploaded:
+                st.warning("Upload a photo first.")
+            else:
+                with st.spinner(""):
+                    try:
+                        files = {"photo": (uploaded.name, uploaded.getvalue(), uploaded.type)}
+                        r2 = requests.post(f"{API_URL}/identity-verify-photo", files=files, timeout=60)
+                        if r2.status_code == 200:
+                            st.session_state["identity_result"]         = r2.json()
+                            st.session_state["identity_uploaded_photo"] = uploaded.getvalue()
+                        else:
+                            st.error(r2.text)
+                    except Exception as e:
+                        st.error(str(e))
+
+    # ── Identity Result Card ──────────────────────────────────────────────
+    if st.session_state.get("identity_result"):
+        result   = st.session_state["identity_result"]
+        score    = result.get("trust_score", 0)
+        badge_t  = result.get("badge","UNKNOWN")
+        summary  = result.get("summary","")
+        bio      = result.get("bio","")
+        photo_url = result.get("photo_url","")
+        pd2      = result.get("checks",{}).get("profile",{})
+        persona  = result.get("persona_type", pd2.get("persona_type","Unknown"))
+        risk     = result.get("risk_level",   pd2.get("risk_level","Unknown"))
+        interesting = result.get("interesting_fact", pd2.get("interesting_fact",""))
+        red_flags   = result.get("red_flags",[])
+        pos_signals = result.get("positive_signals",[])
+        affiliations = result.get("affiliations",[])
+        social_links = result.get("social_links",[])
+        controversies = result.get("controversies",[])
+        recs          = result.get("recommendations",[])
+        input_type  = result.get("input_type","name")
+        input_value = result.get("input_value", result.get("input",{}).get("name",""))
+        identification = result.get("identification",{})
+
+        st.markdown("<div style='margin-top:24px;border-top:1px solid var(--border);padding-top:20px;'></div>", unsafe_allow_html=True)
+
+        # Photo banner for photo identification
+        if input_type == "photo" and identification:
+            id_conf = identification.get("confidence",0)
+            id_name_f = identification.get("name","Unknown")
+            id_role = identification.get("likely_role","")
+            bc = "var(--green)" if id_conf >= 70 else "var(--amber)"
+            st.markdown(
+                f"<div style='background:var(--bg-deep);border:1px solid {bc}33;"
+                f"border-left:3px solid {bc};border-radius:0 4px 4px 0;"
+                f"padding:10px 16px;margin-bottom:14px;font-family:var(--font-mono);"
+                f"font-size:11px;color:{bc};'>"
+                f"IDENTIFIED: {id_name_f.upper()} · {id_role.upper()} · CONFIDENCE {id_conf}%</div>",
+                unsafe_allow_html=True)
+
+        # Photo + trust ring
+        col_img, col_score = st.columns([1, 4], gap="large")
+        with col_img:
+            upl = st.session_state.get("identity_uploaded_photo")
+            if input_type == "photo" and upl:
+                st.image(upl, width=120)
+            elif photo_url:
+                try: st.image(photo_url, width=120)
+                except: st.markdown("👤")
+            else:
+                st.markdown("<div style='font-size:56px;text-align:center;padding:10px;'>👤</div>", unsafe_allow_html=True)
+
+        with col_score:
+            render_trust_ring(score, input_value, badge_t, risk, persona)
+
+        if summary:
+            st.markdown(
+                f"<div style='font-family:var(--font-mono);font-size:12px;color:var(--text-secondary);"
+                f"line-height:1.7;border-left:2px solid var(--border-lit);padding-left:14px;"
+                f"margin-bottom:14px;'>{summary}</div>",
+                unsafe_allow_html=True)
+
+        if bio:
+            with st.expander("FULL BIOGRAPHY"):
+                st.markdown(f"<div style='font-family:var(--font-mono);font-size:12px;color:var(--text-secondary);line-height:1.7;'>{bio}</div>", unsafe_allow_html=True)
+
+        if interesting:
+            st.markdown(
+                f"<div style='background:var(--bg-deep);border:1px solid var(--accent-dim)33;"
+                f"border-left:2px solid var(--accent-dim);border-radius:0 4px 4px 0;"
+                f"padding:10px 16px;margin-bottom:14px;font-family:var(--font-mono);"
+                f"font-size:11px;color:var(--accent-dim);'>💡 {interesting}</div>",
+                unsafe_allow_html=True)
+
+        if affiliations:
+            st.markdown(label("AFFILIATIONS"), unsafe_allow_html=True)
+            aff = " ".join([f"<span style='background:var(--bg-card);border:1px solid var(--border-lit);color:var(--text-secondary);padding:3px 10px;border-radius:3px;font-family:var(--font-mono);font-size:10px;letter-spacing:0.5px;'>{a}</span>" for a in affiliations[:6]])
+            st.markdown(f"<div style='display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;'>{aff}</div>", unsafe_allow_html=True)
+
+        if social_links:
+            st.markdown(label("ONLINE PRESENCE"), unsafe_allow_html=True)
+            for link in social_links[:5]:
+                st.markdown(f"<div style='font-family:var(--font-mono);font-size:11px;margin-bottom:4px;'><a href='{link}' target='_blank' style='color:var(--accent-dim);text-decoration:none;'>↗ {link[:70]}</a></div>", unsafe_allow_html=True)
+
+        col1, col2 = st.columns(2, gap="large")
+        with col1:
+            if red_flags:
+                st.markdown(label("RED FLAGS"), unsafe_allow_html=True)
+                for f in red_flags[:5]:
+                    st.markdown(f"<div style='font-family:var(--font-mono);font-size:11px;color:var(--red);padding:4px 0;border-bottom:1px solid var(--border);'>⚑ {f}</div>", unsafe_allow_html=True)
+        with col2:
+            if pos_signals:
+                st.markdown(label("POSITIVE SIGNALS"), unsafe_allow_html=True)
+                for s in pos_signals[:5]:
+                    st.markdown(f"<div style='font-family:var(--font-mono);font-size:11px;color:var(--green);padding:4px 0;border-bottom:1px solid var(--border);'>✓ {s}</div>", unsafe_allow_html=True)
+
+        if controversies:
+            st.markdown(label("CONTROVERSIES"), unsafe_allow_html=True)
+            for c in controversies[:4]:
+                st.markdown(f"<div style='font-family:var(--font-mono);font-size:11px;color:var(--amber);padding:4px 0;border-bottom:1px solid var(--border);'>◈ {c}</div>", unsafe_allow_html=True)
+
+        if recs:
+            st.markdown(label("RECOMMENDATIONS"), unsafe_allow_html=True)
+            for r in recs[:3]:
+                st.markdown(f"<div style='font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);padding:4px 0;'>→ {r}</div>", unsafe_allow_html=True)
+
+        render_pdf_download([], result)
+
+
+# ── Footer ────────────────────────────────────────────────────────────────
+st.markdown(
+    "<div style='margin-top:48px;padding-top:16px;border-top:1px solid var(--border);"
+    "display:flex;justify-content:space-between;'>"
+    "<span style='font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1.5px;'>ZERO-TRUST ARCHITECTURE</span>"
+    "<span style='font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1.5px;'>MULTI-AGENT SYSTEM</span>"
+    "<span style='font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1.5px;'>RAG-POWERED VERIFICATION</span>"
+    "</div>",
+    unsafe_allow_html=True)

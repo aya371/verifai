@@ -1,4 +1,4 @@
-from fastapi import Request, APIRouter, HTTPException, Request, Depends
+﻿from fastapi import Request, APIRouter, HTTPException, Request, Depends
 import time
 from datetime import datetime
 from backend.api.models import (
@@ -84,3 +84,47 @@ async def identity_verify(request: Request):
     verifier = IdentityVerifier()
     result = verifier.verify(data)
     return result
+
+
+@router.post("/identity-verify-name")
+async def identity_verify_name(request: Request):
+    from backend.agents.identity_verifier import IdentityVerifier
+    data = await request.json()
+    name = data.get("name", "")
+    verifier = IdentityVerifier()
+    context = data.get("context", "")
+    return verifier.verify_by_name(name, extra_context=context)
+
+@router.post("/identity-verify-photo")
+async def identity_verify_photo(request: Request):
+    from backend.agents.identity_verifier import IdentityVerifier
+    from fastapi import UploadFile
+    form = await request.form()
+    photo = form.get("photo")
+    if not photo:
+        return {"error": "No photo provided"}
+    image_bytes = await photo.read()
+    image_type  = photo.content_type or "image/jpeg"
+    verifier = IdentityVerifier()
+    return verifier.verify_by_photo(image_bytes, image_type)
+
+
+
+@router.post("/identity-search-candidates")
+async def identity_search_candidates(request: Request):
+    from backend.agents.identity_verifier import IdentityVerifier
+    data = await request.json()
+    name = data.get("name", "")
+    verifier = IdentityVerifier()
+    candidates = verifier.search_candidates(name)
+    return {"candidates": candidates}
+
+
+@router.post("/identity-search-platforms")
+async def identity_search_platforms(request: Request):
+    from backend.agents.identity_verifier import IdentityVerifier
+    data = await request.json()
+    name = data.get("name", "")
+    verifier = IdentityVerifier()
+    profiles = verifier.search_across_platforms(name)
+    return {"profiles": profiles, "name": name}
