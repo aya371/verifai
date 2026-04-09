@@ -1,10 +1,10 @@
-﻿from anthropic import Anthropic
+from anthropic import Anthropic
 from config import config
 from backend.utils.logger import logger
-from typing import Dict, List
+from typing import Dict, List, Optional
 from ddgs import DDGS
 import re
-import requests
+import requests as http_requests
 import base64
 import json
 
@@ -28,133 +28,339 @@ class IdentityVerifier:
         self.client = Anthropic(api_key=config.ANTHROPIC_API_KEY)
         logger.info("IdentityVerifier initialized")
 
+    # ── Wikipedia API (primary source — zero hallucination) ────────────
+    def _fetch_wikipedia(self, name: str) -> Dict:
+        """Fetch structured data from Wikipedia API — factual, cited, grounded"""
+        try:
+            # Search Wikipedia for the person
+            search_url = "https://en.wikipedia.org/w/api.php"
+            search_params = {
+                "action": "query",
+                "list": "search",
+                "srsearch": name,
+                "srlimit": 3,
+                "format": "json"
+            }
+            search_resp = http_requests.get(search_url, params=search_params, timeout=5)
+            search_data = search_resp.json()
+            results = search_data.get("query", {}).get("search", [])
+
+            if not results:
+                return {"found": False, "source": "Wikipedia", "data": ""}
+
+            # Get the first result's page ID
+            page_id = results[0].get("pageid")
+            title   = results[0].get("title", "")
+
+            # Fetch full extract
+            extract_params = {
+                "action": "query",
+                "pageids": page_id,
+                "prop": "extracts|categories|links",
+                "exintro": True,
+                "explaintext": True,
+                "exsectionformat": "plain",
+                "pllimit": 20,
+                "format": "json"
+            }
+            extract_resp = http_requests.get(search_url, params=extract_params, timeout=5)
+            extract_data = extract_resp.json()
+            pages = extract_data.get("query", {}).get("pages", {})
+            page  = pages.get(str(page_id), {})
+            extract = page.get("extract", "")
+
+            if not extract or len(extract) < 50:
+                return {"found": False, "source": "Wikipedia", "data": ""}
+
+            # Check name relevance — make sure this is actually about the right person
+            name_parts = name.lower().split()
+            extract_lower = extract.lower()
+            if not any(part in extract_lower for part in name_parts if len(part) > 2):
+                return {"found": False, "source": "Wikipedia", "data": ""}
+
+            logger.info(f"Wikipedia found: {title} ({len(extract)} chars)")
+            return {
+                "found": True,
+                "source": "Wikipedia",
+                "title": title,
+                "url": f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
+                "data": extract[:4000],
+                "page_id": page_id
+            }
+
+        except Exception as e:
+            logger.warning(f"Wikipedia fetch failed: {e}")
+            return {"found": False, "source": "Wikipedia", "data": ""}
+
+    def _fetch_wikidata(self, name: str) -> Dict:
+        """Fetch structured facts from Wikidata (birth date, nationality, occupation)"""
+        try:
+            url = "https://www.wikidata.org/w/api.php"
+            params = {
+                "action": "wbsearchentities",
+                "search": name,
+                "language": "en",
+                "limit": 1,
+                "format": "json",
+                "type": "item"
+            }
+            resp = http_requests.get(url, params=params, timeout=5)
+            data = resp.json()
+            results = data.get("search", [])
+            if not results:
+                return {}
+
+            entity = results[0]
+            return {
+                "id":          entity.get("id", ""),
+                "label":       entity.get("label", ""),
+                "description": entity.get("description", ""),
+                "url":         entity.get("url", ""),
+            }
+        except Exception as e:
+            logger.warning(f"Wikidata fetch failed: {e}")
+            return {}
+
+    def verify_by_name(self, name: str, extra_context: str = "") -> Dict:
+        """Full profile verification — Wikipedia first, then web supplements"""
+        logger.info(f"Full verification for: {name}")
+
+        sources_used = []
+        all_info_parts = []
+
+        # ── Layer 1: Wikipedia (most reliable) ────────────────────────
+        wiki = self._fetch_wikipedia(name)
+        if wiki.get("found"):
+            all_info_parts.append(f"[WIKIPEDIA - VERIFIED SOURCE]\n{wiki['data']}")
+            sources_used.append(wiki.get("url", ""))
+            logger.info("Wikipedia data found and loaded")
+
+        # ── Layer 2: Wikidata structured facts ─────────────────────────
+        wikidata = self._fetch_wikidata(name)
+        if wikidata.get("description"):
+            all_info_parts.append(f"[WIKIDATA]\nDescription: {wikidata['description']}")
+
+        # ── Layer 3: DuckDuckGo web search (supplement only) ───────────
+        try:
+            with DDGS() as ddgs:
+                results = list(ddgs.text(
+                    f'"{name}" {extra_context} biography profile',
+                    max_results=5
+                ))
+            for r in results:
+                url   = r.get("href", "")
+                title = r.get("title", "")
+                body  = r.get("body", "")[:400]
+                # Only use if name appears in result
+                if any(p in (title + body).lower() for p in name.lower().split() if len(p) > 2):
+                    all_info_parts.append(f"[WEB: {url}]\nTitle: {title}\n{body}")
+                    if url and url not in sources_used:
+                        sources_used.append(url)
+        except Exception as e:
+            logger.warning(f"Web search failed: {e}")
+
+        # ── Layer 4: News search ───────────────────────────────────────
+        try:
+            with DDGS() as ddgs:
+                news = list(ddgs.text(f'"{name}" news controversy', max_results=3))
+            for r in news:
+                body = r.get("body", "")[:300]
+                if any(p in body.lower() for p in name.lower().split() if len(p) > 2):
+                    all_info_parts.append(f"[NEWS: {r.get('href','')}]\n{r.get('title','')}: {body}")
+        except Exception:
+            pass
+
+        web_info   = "\n\n---\n\n".join(all_info_parts)
+        photo_url  = self._find_photo(name)
+        has_wiki   = wiki.get("found", False)
+        profile    = self._analyze_profile_strict(name, web_info, extra_context, has_wiki)
+
+        return self._build_result(profile, photo_url, web_info,
+                                   input_type="name", input_value=name)
+
+    def _analyze_profile_strict(self, name: str, web_info: str,
+                                 extra: str = "", has_wikipedia: bool = False) -> Dict:
+        """
+        Strict analysis — Claude is forbidden from inventing anything.
+        Every field must come from the provided sources.
+        """
+        wiki_instruction = (
+            "The information includes a WIKIPEDIA article which is a verified, "
+            "cited source. Prioritize Wikipedia data over web snippets."
+            if has_wikipedia else
+            "No Wikipedia article was found. Be extra conservative — only report "
+            "what is clearly stated in the sources. If uncertain, say 'Not confirmed'."
+        )
+
+        prompt = f"""You are a strict identity verification system. Your job is to extract ONLY facts that are explicitly stated in the sources below.
+
+STRICT RULES:
+1. NEVER invent, assume, or extrapolate any information
+2. If a field is not found in the sources, use exactly: "Not found in available sources"
+3. Only include social links that appear as actual URLs in the sources
+4. Only include affiliations explicitly named in the sources
+5. Do not combine partial information to create new claims
+6. Confidence score must reflect how much was actually found (not how famous the person is)
+
+{wiki_instruction}
+
+PERSON BEING VERIFIED: {name}
+ADDITIONAL CONTEXT: {extra if extra else "None"}
+
+SOURCES (use ONLY these):
+{web_info[:4000]}
+
+Return ONLY this JSON (no extra text):
+{{
+    "score": 0-100,
+    "persona_type": "Politician/Journalist/Celebrity/Business/Academic/Unknown",
+    "risk_level": "Low/Medium/High/Critical/Unknown",
+    "summary": "2-3 sentences from sources only, or 'Insufficient information found'",
+    "bio": "Detailed paragraph from sources only, or 'No biography found in available sources'",
+    "social_links": ["only URLs explicitly found in sources"],
+    "affiliations": ["only organizations explicitly named in sources"],
+    "red_flags": ["only actual concerns explicitly mentioned in sources"],
+    "positive_signals": ["only actual positive facts explicitly in sources"],
+    "controversies": ["only actual controversies explicitly mentioned"],
+    "recommendations": ["practical advice for user about this identity"],
+    "interesting_fact": "one specific fact from sources, or empty string if none found",
+    "data_quality": "HIGH (Wikipedia found) / MEDIUM (web only) / LOW (minimal data)"
+}}"""
+
+        try:
+            msg = self.client.messages.create(
+                model=config.CLAUDE_MODEL,
+                max_tokens=900,
+                temperature=0,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            response = msg.content[0].text.strip()
+            if response.startswith("```json"): response = response[7:]
+            if response.endswith("```"):       response = response[:-3]
+            result = json.loads(response.strip())
+
+            # Post-process: if no Wikipedia and score > 70, cap at 65
+            if not has_wikipedia and result.get("score", 0) > 70:
+                result["score"] = 65
+                logger.info("Score capped at 65 (no Wikipedia source)")
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Profile analysis failed: {e}")
+            return {
+                "score": 0, "persona_type": "Unknown", "risk_level": "Unknown",
+                "summary": "Analysis unavailable due to an error.",
+                "bio": "Not found in available sources",
+                "social_links": [], "affiliations": [], "red_flags": [],
+                "positive_signals": [], "controversies": [], "recommendations": [],
+                "interesting_fact": "", "data_quality": "LOW"
+            }
+
     def search_across_platforms(self, name: str) -> List[Dict]:
-        """
-        Step 1: Ask Claude what it knows about this person + their official profiles
-        Step 2: Search DuckDuckGo for each platform with exact name in quotes
-        Step 3: Ask Claude to validate each result â€” is this actually the right person?
-        """
-        logger.info(f"Searching across platforms for: {name}")
+        """Search across platforms with strict name validation"""
+        logger.info(f"Searching platforms for: {name}")
+        found_profiles = []
 
-        # â”€â”€ Step 1: Claude pre-identifies the person â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        known_profiles = self._claude_identify_person(name)
-        logger.info(f"Claude identified: {known_profiles.get('identified', False)}")
+        name_lower = name.lower().strip()
+        name_parts = [p for p in name_lower.split() if len(p) > 2]
 
-        # â”€â”€ Step 2: Search each platform â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        raw_results = []
+        def is_match(title: str, body: str, url: str) -> bool:
+            combined = (title + " " + body + " " + url).lower()
+            if name_lower in combined:
+                return True
+            if len(name_parts) >= 2:
+                return all(p in combined for p in name_parts)
+            return name_lower in title.lower()
+
+        # First check Wikipedia
+        wiki = self._fetch_wikipedia(name)
+        if wiki.get("found"):
+            found_profiles.append({
+                "platform": "Wikipedia",
+                "icon": "W",
+                "color": "#888888",
+                "url": wiki.get("url", ""),
+                "title": wiki.get("title", name),
+                "snippet": wiki.get("data", "")[:200],
+            })
+
         for platform in PLATFORMS:
+            if platform["name"] == "Wikipedia":
+                continue
             try:
-                if platform["site"] == "news":
-                    query = f'"{name}" biography profile news'
-                else:
-                    query = f'"{name}" site:{platform["site"]}'
-
+                query = f'"{name}" site:{platform["site"]}'
                 with DDGS() as ddgs:
                     results = list(ddgs.text(query, max_results=3))
-
                 for result in results:
                     url   = result.get("href", "")
                     title = result.get("title", "")
                     body  = result.get("body", "")
                     if not url or len(body) < 20:
                         continue
-                    raw_results.append({
+                    if not is_match(title, body, url):
+                        continue
+                    found_profiles.append({
                         "platform": platform["name"],
                         "icon":     platform["icon"],
                         "color":    platform["color"],
                         "url":      url,
                         "title":    title,
-                        "snippet":  body[:300],
+                        "snippet":  body[:200],
                     })
                     break
             except Exception as e:
                 logger.warning(f"Search failed for {platform['name']}: {e}")
 
-        if not raw_results:
-            return []
-
-        # â”€â”€ Step 3: Claude validates each result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        validated = self._claude_validate_results(name, raw_results, known_profiles)
-        logger.info(f"Validated {len(validated)} profiles out of {len(raw_results)}")
-        return validated
+        logger.info(f"Found {len(found_profiles)} verified profiles")
+        return found_profiles
 
     def _claude_identify_person(self, name: str) -> Dict:
-        """Ask Claude what it knows about this person"""
         try:
             msg = self.client.messages.create(
                 model=config.CLAUDE_MODEL,
-                max_tokens=400,
+                max_tokens=300,
                 temperature=0,
-                messages=[{"role": "user", "content": f"""What do you know about a person named "{name}"?
-
-If this is a known public figure, provide their official profile URLs.
-If unknown, say so.
-
+                messages=[{"role": "user", "content": f"""What do you know about "{name}"?
 Respond ONLY with JSON:
-{{
-    "identified": true/false,
-    "full_name": "exact name if known",
-    "description": "brief description or empty",
-    "known_urls": ["list of verified official profile URLs if any"],
-    "known_platforms": ["platforms they are known to be on"],
-    "nationality": "country if known"
-}}"""}]
+{{"identified":true/false,"full_name":"","description":"","known_urls":[],"known_platforms":[],"nationality":""}}"""}]
             )
             response = msg.content[0].text.strip()
             if response.startswith("```json"): response = response[7:]
             if response.endswith("```"):       response = response[:-3]
             return json.loads(response.strip())
-        except Exception as e:
-            logger.warning(f"Claude pre-identification failed: {e}")
+        except Exception:
             return {"identified": False, "full_name": name, "description": "",
                     "known_urls": [], "known_platforms": [], "nationality": ""}
 
     def _claude_validate_results(self, name: str, results: List[Dict], known_info: Dict) -> List[Dict]:
-        """Ask Claude to validate which results are actually for the right person"""
         if not results:
             return []
-
         results_text = ""
         for i, r in enumerate(results):
             results_text += f"\n[{i}] Platform: {r['platform']}\nTitle: {r['title']}\nURL: {r['url']}\nSnippet: {r['snippet'][:150]}\n"
-
         try:
             msg = self.client.messages.create(
                 model=config.CLAUDE_MODEL,
-                max_tokens=400,
+                max_tokens=200,
                 temperature=0,
-                messages=[{"role": "user", "content": f"""I searched for "{name}" across social media platforms and got these results.
-
-WHAT WE KNOW ABOUT THIS PERSON:
-{json.dumps(known_info, indent=2)}
-
-SEARCH RESULTS:
+                messages=[{"role": "user", "content": f"""For "{name}", which of these results are actually about this person?
 {results_text}
-
-For each result, determine if it is ACTUALLY about "{name}" or a different person.
-Be strict â€” only approve results where the title/snippet clearly refers to "{name}".
-
-Respond ONLY with a JSON array of indices that are valid (e.g. [0, 2, 4]):"""}]
+Return ONLY a JSON array of valid indices, e.g. [0, 2]:"""}]
             )
             response = msg.content[0].text.strip()
             if response.startswith("```json"): response = response[7:]
             if response.endswith("```"):       response = response[:-3]
             valid_indices = json.loads(response.strip())
             return [results[i] for i in valid_indices if i < len(results)]
-        except Exception as e:
-            logger.warning(f"Claude validation failed: {e}")
-            # Fallback: basic name filter
+        except Exception:
             name_lower = name.lower()
             name_parts = [p for p in name_lower.split() if len(p) > 2]
-            validated = []
-            for r in results:
-                combined = (r["title"] + " " + r["snippet"] + " " + r["url"]).lower()
-                if name_lower in combined or all(p in combined for p in name_parts):
-                    validated.append(r)
-            return validated
+            return [r for r in results if
+                    name_lower in (r["title"] + r["snippet"] + r["url"]).lower() or
+                    all(p in (r["title"] + r["snippet"]).lower() for p in name_parts)]
 
     def search_candidates(self, name: str) -> List[Dict]:
-        """Search for multiple people with the same name"""
         logger.info(f"Searching candidates for: {name}")
         try:
             snippets = []
@@ -167,15 +373,11 @@ Respond ONLY with a JSON array of indices that are valid (e.g. [0, 2, 4]):"""}]
                 model=config.CLAUDE_MODEL,
                 max_tokens=600,
                 temperature=0,
-                messages=[{"role": "user", "content": f"""Given these search results for "{name}", identify up to 4 DIFFERENT real people with this name.
+                messages=[{"role": "user", "content": f"""Given these results for "{name}", identify up to 4 DIFFERENT real people.
 
-SEARCH RESULTS:
 {chr(10).join(snippets[:6])}
 
-For each distinct person, return:
-- full_name, role, country, known_for, search_query (for finding their photo)
-
-Respond ONLY with JSON array:
+Return ONLY JSON array:
 [{{"full_name":"...","role":"...","country":"...","known_for":"...","search_query":"..."}}]"""}]
             )
             response = msg.content[0].text.strip()
@@ -190,41 +392,15 @@ Respond ONLY with JSON array:
                     c["photo_url"] = imgs[0].get("image", "") if imgs else ""
                 except Exception:
                     c["photo_url"] = ""
-
             return candidates
+
         except Exception as e:
             logger.error(f"Candidate search failed: {e}")
             return [{"full_name": name, "role": "Unknown", "country": "",
                      "known_for": "Could not find info", "search_query": name, "photo_url": ""}]
 
-    def verify_by_name(self, name: str, extra_context: str = "") -> Dict:
-        """Full profile verification"""
-        logger.info(f"Full verification for: {name}")
-        snippets = []
-        try:
-            with DDGS() as ddgs:
-                results = list(ddgs.text(f'"{name}" {extra_context} biography profile', max_results=6))
-            for r in results:
-                snippets.append(f"Title: {r.get('title','')}\n{r.get('body','')[:300]}")
-        except Exception as e:
-            logger.warning(f"Web search failed: {e}")
-
-        try:
-            with DDGS() as ddgs:
-                news = list(ddgs.text(f'"{name}" news controversy', max_results=3))
-            for r in news:
-                snippets.append(f"[NEWS] {r.get('title','')}: {r.get('body','')[:200]}")
-        except Exception:
-            pass
-
-        web_info  = "\n\n".join(snippets[:7])
-        photo_url = self._find_photo(name)
-        profile   = self._analyze_profile_from_text(name, web_info, extra_context)
-        return self._build_result(profile, photo_url, web_info, input_type="name", input_value=name)
-
     def verify_by_photo(self, image_bytes: bytes, image_type: str = "image/jpeg") -> Dict:
-        """Identify person from photo using Claude Vision"""
-        logger.info("Verifying identity by photo...")
+        logger.info("Verifying by photo...")
         identification = self._identify_from_photo(image_bytes, image_type)
         identified_name = identification.get("name", "")
 
@@ -238,19 +414,10 @@ Respond ONLY with JSON array:
                 "checks": {}, "input_type": "photo", "identification": identification
             }
 
-        web_info = ""
-        try:
-            with DDGS() as ddgs:
-                results = list(ddgs.text(f'"{identified_name}" biography', max_results=5))
-            web_info = "\n".join([r.get("body","")[:200] for r in results])
-        except Exception:
-            pass
-
-        photo_url = self._find_photo(identified_name)
-        profile   = self._analyze_profile_from_text(identified_name, web_info, identification.get("description",""))
-        result    = self._build_result(profile, photo_url, web_info, input_type="photo", input_value=identified_name)
+        result = self.verify_by_name(identified_name)
         result["identified_name"] = identified_name
         result["identification"]  = identification
+        result["input_type"]      = "photo"
         return result
 
     def verify(self, input_data: Dict) -> Dict:
@@ -292,54 +459,6 @@ Respond ONLY with JSON array:
             return {"name": "Unknown", "confidence": 0, "description": "",
                     "likely_role": "Unknown", "context_clues": []}
 
-    def _analyze_profile_from_text(self, name: str, web_info: str, extra: str = "") -> Dict:
-        prompt = f"""You are an identity verification expert. Analyze ONLY the information provided.
-DO NOT invent anything not present in the sources below.
-If something is not found, say "Not found in available sources".
-
-PERSON: {name}
-EXTRA CONTEXT: {extra}
-
-WEB INFORMATION:
-{web_info[:3000]}
-
-Respond ONLY with JSON:
-{{
-    "score": 0-100,
-    "persona_type": "Politician/Journalist/Celebrity/Business/Academic/Unknown",
-    "risk_level": "Low/Medium/High/Critical",
-    "summary": "2-3 sentence bio based ONLY on found info",
-    "bio": "Detailed paragraph based ONLY on found info",
-    "social_links": ["only URLs actually found in search results"],
-    "affiliations": ["only organizations actually mentioned"],
-    "red_flags": ["only actual concerns found"],
-    "positive_signals": ["only actual positive info found"],
-    "controversies": ["only actual controversies found"],
-    "recommendations": ["advice for user"],
-    "interesting_fact": "one notable fact from the results"
-}}"""
-
-        try:
-            msg = self.client.messages.create(
-                model=config.CLAUDE_MODEL,
-                max_tokens=800,
-                temperature=0,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            response = msg.content[0].text.strip()
-            if response.startswith("```json"): response = response[7:]
-            if response.endswith("```"):       response = response[:-3]
-            return json.loads(response.strip())
-        except Exception as e:
-            logger.error(f"Profile analysis failed: {e}")
-            return {
-                "score": 50, "persona_type": "Unknown", "risk_level": "Unknown",
-                "summary": "Analysis unavailable", "bio": "",
-                "social_links": [], "affiliations": [], "red_flags": [],
-                "positive_signals": [], "controversies": [], "recommendations": [],
-                "interesting_fact": ""
-            }
-
     def _build_result(self, profile: Dict, photo_url: str, web_info: str,
                       input_type: str, input_value: str) -> Dict:
         score = profile.get("score", 50)
@@ -362,8 +481,8 @@ Respond ONLY with JSON:
             "controversies":    profile.get("controversies", []),
             "recommendations":  profile.get("recommendations", []),
             "interesting_fact": profile.get("interesting_fact", ""),
+            "data_quality":     profile.get("data_quality", "MEDIUM"),
             "checks":           {"profile": profile},
             "input_type":       input_type,
             "input_value":      input_value,
         }
-
