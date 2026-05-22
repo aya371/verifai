@@ -1,7 +1,11 @@
 """
-Authentication manager for VerifAI.
-Uses SQLite + bcrypt for secure user management.
+Authentication manager for VerifAI — Security hardened.
 Save to: backend/auth/auth_manager.py
+
+Security improvements:
+- Parameterized SQL everywhere (was already done — verified)
+- Session expiry enforced server-side + expired sessions deleted from DB
+- Expired sessions cleaned up on every validate call
 """
 import sqlite3
 import bcrypt
@@ -44,7 +48,6 @@ def register_user(name: str, email: str, password: str) -> Dict:
     init_db()
     email = email.lower().strip()
 
-    # Validate
     if not name or len(name.strip()) < 2:
         return {"success": False, "error": "Name must be at least 2 characters."}
     if not email or "@" not in email:
@@ -52,11 +55,13 @@ def register_user(name: str, email: str, password: str) -> Dict:
     if len(password) < 8:
         return {"success": False, "error": "Password must be at least 8 characters."}
 
-    # Hash password
-    hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+    hashed = bcrypt.hashpw(
+        password.encode("utf-8"), bcrypt.gensalt(rounds=12)
+    ).decode("utf-8")
 
     try:
         conn = get_db()
+        # ✅ Parameterized — no f-strings in SQL
         conn.execute(
             "INSERT INTO users (name, email, password, created_at) VALUES (?, ?, ?, ?)",
             (name.strip(), email, hashed, datetime.utcnow().isoformat())
@@ -74,7 +79,10 @@ def login_user(email: str, password: str) -> Dict:
     email = email.lower().strip()
 
     conn = get_db()
-    user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+    # ✅ Parameterized
+    user = conn.execute(
+        "SELECT * FROM users WHERE email = ?", (email,)
+    ).fetchone()
 
     if not user:
         conn.close()
@@ -84,9 +92,9 @@ def login_user(email: str, password: str) -> Dict:
         conn.close()
         return {"success": False, "error": "Incorrect password."}
 
-    # Create session token (30 days)
-    token = secrets.token_urlsafe(32)
+    token   = secrets.token_urlsafe(32)
     expires = (datetime.utcnow() + timedelta(days=30)).isoformat()
+    # ✅ Parameterized
     conn.execute(
         "INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
         (token, user["id"], datetime.utcnow().isoformat(), expires)
@@ -100,7 +108,7 @@ def login_user(email: str, password: str) -> Dict:
 
     return {
         "success": True,
-        "token": token,
+        "token":   token,
         "user": {
             "id":    user["id"],
             "name":  user["name"],
@@ -109,31 +117,51 @@ def login_user(email: str, password: str) -> Dict:
     }
 
 def validate_session(token: str) -> Optional[Dict]:
-    """Validate a session token and return user info if valid"""
+    """
+    Validate a session token server-side.
+    - Expired sessions are deleted from the DB (not just rejected)
+    - Uses parameterized queries
+    """
     if not token:
         return None
     init_db()
     conn = get_db()
+
+    # ✅ Parameterized
     row = conn.execute("""
         SELECT u.id, u.name, u.email, s.expires_at
         FROM sessions s JOIN users u ON s.user_id = u.id
         WHERE s.token = ?
     """, (token,)).fetchone()
-    conn.close()
 
     if not row:
+        conn.close()
         return None
+
+    # ✅ Server-side expiry enforcement — delete expired token from DB
     if datetime.utcnow() > datetime.fromisoformat(row["expires_at"]):
-        return None  # Expired
+        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        conn.commit()
+        conn.close()
+        return None
+
+    # ✅ Clean up ALL expired sessions for this user while we're here
+    conn.execute(
+        "DELETE FROM sessions WHERE user_id = ? AND expires_at < ?",
+        (row["id"], datetime.utcnow().isoformat())
+    )
+    conn.commit()
+    conn.close()
 
     return {"id": row["id"], "name": row["name"], "email": row["email"]}
 
 def logout_session(token: str):
-    """Invalidate a session token"""
+    """Invalidate a session token."""
     if not token:
         return
     init_db()
     conn = get_db()
+    # ✅ Parameterized
     conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
     conn.commit()
     conn.close()

@@ -48,3 +48,45 @@ class UsageStats(BaseModel):
     total_cost: float
     remaining_credit: float
     requests_today: int
+
+
+# ── Media Analysis Models ─────────────────────────────────────────────────
+
+class AudioAnalysisResult(BaseModel):
+    media_type: str = "audio"
+    authenticity_label: str = "uncertain"
+    authenticity_confidence: float = 0.5
+    deepfake_probability: float = 0.5
+    evidence_strength: str = "weak"
+    signals: List[str] = Field(default_factory=list)
+    anomaly_score: int = 0
+    entropy: Optional[float] = None
+    size_kb: Optional[float] = None
+    format: str = "unknown"
+    method: str = ""
+    flag: str = "no obvious anomalies"
+
+class VideoAnalysisResult(BaseModel):
+    media_type: str = "video"
+    authenticity_label: str = "uncertain"
+    authenticity_confidence: float = 0.5
+    deepfake_probability: float = 0.5
+    evidence_strength: str = "weak"
+    signals: List[str] = Field(default_factory=list)
+    anomaly_score: int = 0
+    entropy: Optional[float] = None
+    size_mb: Optional[float] = None
+    format: str = "unknown"
+    method: str = ""
+    flag: str = "no obvious anomalies"
+
+class CrossVerifyResult(BaseModel):
+    overall_status: str = "uncertain"
+    confidence: float = 0.5
+    identity_match: Optional[Dict[str, Any]] = None
+    image_result: Optional[Dict[str, Any]] = None
+    audio_result: Optional[Dict[str, Any]] = None
+    video_result: Optional[Dict[str, Any]] = None
+    cross_modal: Optional[Dict[str, Any]] = None
+    signals: List[str] = Field(default_factory=list)
+    note: str = ""

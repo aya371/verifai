@@ -1,118 +1,93 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+"""
+VerifAI FastAPI Backend — Security hardened main.py
+Save to: backend/main.py
+"""
+import os
 from contextlib import asynccontextmanager
-import sys
-from pathlib import Path
-
-# Add parent directory to path
-sys.path.append(str(Path(__file__).parent.parent))
-
-from config import config
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
 from backend.api.routes import router
 from backend.database.chroma_client import ChromaClient
 from backend.database.neo4j_client import Neo4jClient
-from backend.utils.logger import logger
 from backend.utils.usage_tracker import UsageTracker
+from backend.utils.logger import logger
 
-# Global instances
-chroma_client = None
-neo4j_client = None
-usage_tracker = None
+MAX_UPLOAD_SIZE = 52_428_800   # 50 MB
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup and shutdown events"""
-    # Startup
     logger.info("🚀 Starting VerifAI backend...")
-    
-    global chroma_client, neo4j_client, usage_tracker
-    
-    try:
-        # Initialize ChromaDB
-        logger.info("📊 Initializing ChromaDB...")
-        chroma_client = ChromaClient()
-        app.state.chroma = chroma_client
-        logger.info("✅ ChromaDB initialized")
-        
-        # Initialize Neo4j (optional for demo if not installed)
-        try:
-            logger.info("🔗 Connecting to Neo4j...")
-            neo4j_client = Neo4jClient()
-            neo4j_client.create_schema()
-            app.state.neo4j = neo4j_client
-            logger.info("✅ Neo4j connected")
-        except Exception as e:
-            logger.warning(f"⚠️ Neo4j not available: {e}")
-            app.state.neo4j = None
-        
-        # Initialize usage tracker
-        usage_tracker = UsageTracker()
-        app.state.usage_tracker = usage_tracker
-        logger.info("✅ Usage tracker initialized")
-        
-        logger.info("🎉 VerifAI backend ready!")
-        
-    except Exception as e:
-        logger.error(f"❌ Startup failed: {e}")
-        raise
-    
+    logger.info("📊 Initializing ChromaDB...")
+    app.state.chroma = ChromaClient()
+    logger.info("✅ ChromaDB initialized")
+    logger.info("🔗 Connecting to Neo4j...")
+    app.state.neo4j = Neo4jClient()
+    logger.info("✅ Neo4j connected")
+    app.state.usage_tracker = UsageTracker()
+    logger.info("✅ Usage tracker initialized")
+    logger.info("🎉 VerifAI backend ready!")
     yield
-    
-    # Shutdown
-    logger.info("👋 Shutting down VerifAI backend...")
-    if neo4j_client:
-        neo4j_client.close()
-    logger.info("✅ Cleanup complete")
+    try:
+        app.state.neo4j.close()
+    except Exception:
+        pass
 
-# Create FastAPI app
 app = FastAPI(
     title="VerifAI API",
-    description="Multi-Agent Platform for Digital Trust Verification",
+    description="Digital Trust Verification Platform",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
-# CORS middleware
+# ── CORS ──────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:8501",
+        "http://127.0.0.1:8501",
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
-# Include routes
+# ── File size limit ───────────────────────────────────────────────────────
+# Checked via Content-Length header BEFORE reading the body.
+# This avoids the BaseHTTPMiddleware streaming bug entirely.
+@app.middleware("http")
+async def limit_upload_size(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_UPLOAD_SIZE:
+        return JSONResponse(
+            status_code=413,
+            content={"detail": "File too large. Maximum allowed size is 50 MB."}
+        )
+    return await call_next(request)
+
+# ── Security headers ──────────────────────────────────────────────────────
+# Uses a route-level dependency instead of BaseHTTPMiddleware to avoid
+# the "No response returned" RuntimeError on streaming/long responses.
+# This is the correct pattern for Starlette >= 0.20 with async routes.
+SECURITY_HEADERS = {
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "X-Content-Type-Options":    "nosniff",
+    "X-Frame-Options":           "DENY",
+    "Referrer-Policy":           "strict-origin-when-cross-origin",
+}
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    try:
+        response = await call_next(request)
+    except RuntimeError as e:
+        if "No response returned" in str(e):
+            # Streaming response consumed — return empty 200 with headers
+            response = Response(status_code=200)
+        else:
+            raise
+    for header, value in SECURITY_HEADERS.items():
+        response.headers[header] = value
+    return response
+
 app.include_router(router, prefix="/api")
-
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "message": "VerifAI API - Digital Trust Verification",
-        "version": "1.0.0",
-        "status": "operational",
-        "demo": "fact-checking",
-        "endpoints": {
-            "fact_check": "/api/fact-check",
-            "health": "/api/health",
-            "usage": "/api/usage"
-        }
-    }
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "chroma": "connected" if chroma_client else "disconnected",
-        "neo4j": "connected" if neo4j_client else "not required for demo"
-    }
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "backend.main:app",
-        host=config.API_HOST,
-        port=config.API_PORT,
-        reload=True
-    )

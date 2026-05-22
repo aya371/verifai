@@ -1,358 +1,442 @@
 """
-Login page for VerifAI.
+VerifAI Login Page — Hybrid: animated HTML left panel + real Streamlit form right.
 Save to: frontend/login_page.py
 """
 import streamlit as st
+import streamlit.components.v1 as components
 import sys, os, base64
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-def get_logo_b64():
-    logo_path = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
-    if os.path.exists(logo_path):
-        with open(logo_path, "rb") as f:
-            return base64.b64encode(f.read()).decode()
+
+def _logo_b64() -> str:
+    for p in [
+        os.path.join(os.path.dirname(__file__), "assets", "logo.png"),
+        r"C:\Users\aya\Pictures\logo.png",
+        r"C:\Users\User\Pictures\logo.png",
+    ]:
+        if os.path.exists(p):
+            with open(p, "rb") as f:
+                return base64.b64encode(f.read()).decode()
     return ""
-
-def render_login_css():
-    theme = st.session_state.get("theme", "dark")
-    if theme == "light":
-        bg       = "#f0f6ff"
-        card     = "#ffffff"
-        text     = "#0f172a"
-        muted    = "#64748b"
-        border   = "#cbd5e1"
-        accent   = "#0284c7"
-        input_bg = "#f8fafc"
-        ph_color = "#94a3b8"
-        cursor_c = "#0284c7"
-    else:
-        bg       = "#080f17"
-        card     = "#111f2e"
-        text     = "#f1f8ff"
-        muted    = "#4a7090"
-        border   = "#1e3448"
-        accent   = "#38bdf8"
-        input_bg = "#0a1628"
-        ph_color = "#2a5070"
-        cursor_c = "#38bdf8"
-
-    st.markdown(f"""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
-html, body, [class*="css"] {{
-    font-family: 'Space Grotesk', sans-serif !important;
-    background-color: {bg} !important;
-    color: {text} !important;
-}}
-.main .block-container {{
-    padding: 0 !important;
-    max-width: 100% !important;
-    background-color: {bg} !important;
-}}
-.stApp, [data-testid="stAppViewContainer"],
-[data-testid="stAppViewBlockContainer"] {{
-    background-color: {bg} !important;
-}}
-#MainMenu, footer, header {{ visibility: hidden !important; }}
-[data-testid="stDecoration"] {{ display: none !important; }}
-[data-testid="stTextInput"] input {{
-    background-color: {input_bg} !important;
-    border: 1px solid {border} !important;
-    border-radius: 6px !important;
-    color: {text} !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 14px !important;
-    padding: 12px 16px !important;
-    caret-color: {cursor_c} !important;
-}}
-[data-testid="stTextInput"] input::placeholder {{
-    color: {ph_color} !important;
-    opacity: 1 !important;
-}}
-[data-testid="stTextInput"] input::-webkit-input-placeholder {{
-    color: {ph_color} !important;
-    opacity: 1 !important;
-}}
-[data-testid="stTextInput"] input::-moz-placeholder {{
-    color: {ph_color} !important;
-    opacity: 1 !important;
-}}
-[data-testid="stTextInput"] input:-ms-input-placeholder {{
-    color: {ph_color} !important;
-    opacity: 1 !important;
-}}
-[data-testid="stTextInput"] input:focus {{
-    border-color: {accent} !important;
-    box-shadow: 0 0 0 3px {accent}20 !important;
-    outline: none !important;
-}}
-[data-testid="stTextInput"] button {{
-    color: {muted} !important;
-    background: transparent !important;
-    border: none !important;
-}}
-[data-testid="stButton"] button {{
-    background: transparent !important;
-    border: 1px solid {accent} !important;
-    color: {accent} !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 12px !important;
-    font-weight: 600 !important;
-    letter-spacing: 2px !important;
-    border-radius: 4px !important;
-    padding: 10px 0 !important;
-    transition: all 0.2s !important;
-}}
-[data-testid="stButton"] button:hover {{
-    background: {accent}15 !important;
-    box-shadow: 0 0 16px {accent}25 !important;
-}}
-</style>
-""", unsafe_allow_html=True)
-
-
-def render_cybersec_bg():
-    theme = st.session_state.get("theme", "dark")
-    if theme == "light":
-        return
-    st.markdown("""
-<style>
-#cyberbg {
-    position: fixed; top: 0; left: 0;
-    width: 100vw; height: 100vh;
-    pointer-events: none; z-index: 0; overflow: hidden;
-}
-#matrix-canvas { position: absolute; top: 0; left: 0; opacity: 0.13; }
-#particle-canvas { position: absolute; top: 0; left: 0; }
-.scan-line {
-    position: absolute; left: 0; top: 0; width: 100%; height: 2px;
-    background: rgba(56,189,248,0.06);
-    animation: scandown 5s linear infinite;
-}
-@keyframes scandown { 0% { top: 0; } 100% { top: 100vh; } }
-.corner-tl {
-    position: fixed; top: 18px; left: 18px;
-    width: 22px; height: 22px;
-    border-top: 1px solid rgba(56,189,248,0.3);
-    border-left: 1px solid rgba(56,189,248,0.3);
-    pointer-events: none; z-index: 1;
-}
-.corner-br {
-    position: fixed; bottom: 18px; right: 18px;
-    width: 22px; height: 22px;
-    border-bottom: 1px solid rgba(56,189,248,0.3);
-    border-right: 1px solid rgba(56,189,248,0.3);
-    pointer-events: none; z-index: 1;
-}
-</style>
-<div id="cyberbg">
-    <canvas id="matrix-canvas"></canvas>
-    <canvas id="particle-canvas"></canvas>
-    <div class="scan-line"></div>
-</div>
-<div class="corner-tl"></div>
-<div class="corner-br"></div>
-<script>
-(function() {
-    function init() {
-        const W = window.innerWidth, H = window.innerHeight;
-        const mc = document.getElementById('matrix-canvas');
-        mc.width = W; mc.height = H;
-        const mx = mc.getContext('2d');
-        const cols = Math.floor(W / 16);
-        const drops = Array(cols).fill(1);
-        const chars = '01アイウエABCDEF><{}[]#$@!';
-        function drawMatrix() {
-            mx.fillStyle = 'rgba(8,15,23,0.06)';
-            mx.fillRect(0, 0, W, H);
-            mx.font = '13px JetBrains Mono, monospace';
-            drops.forEach((y, i) => {
-                const c = chars[Math.floor(Math.random() * chars.length)];
-                mx.globalAlpha = Math.random() * 0.5 + 0.1;
-                mx.fillStyle = '#38bdf8';
-                mx.fillText(c, i * 16, y * 16);
-                if (y * 16 > H && Math.random() > 0.975) drops[i] = 0;
-                drops[i]++;
-            });
-            mx.globalAlpha = 1;
-        }
-        const pc = document.getElementById('particle-canvas');
-        pc.width = W; pc.height = H;
-        const pctx = pc.getContext('2d');
-        const pts = Array.from({ length: 28 }, () => ({
-            x: Math.random() * W, y: Math.random() * H,
-            vx: (Math.random() - 0.5) * 0.45,
-            vy: (Math.random() - 0.5) * 0.45,
-            r: Math.random() * 1.8 + 0.8
-        }));
-        function drawParticles() {
-            pctx.clearRect(0, 0, W, H);
-            pts.forEach(p => {
-                p.x += p.vx; p.y += p.vy;
-                if (p.x < 0 || p.x > W) p.vx *= -1;
-                if (p.y < 0 || p.y > H) p.vy *= -1;
-                pctx.beginPath();
-                pctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-                pctx.fillStyle = 'rgba(56,189,248,0.35)';
-                pctx.fill();
-            });
-            pts.forEach((p, i) => {
-                pts.slice(i + 1).forEach(q => {
-                    const dx = p.x - q.x, dy = p.y - q.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist < 125) {
-                        pctx.beginPath();
-                        pctx.moveTo(p.x, p.y); pctx.lineTo(q.x, q.y);
-                        pctx.strokeStyle = 'rgba(56,189,248,' + (0.15 * (1 - dist / 125)) + ')';
-                        pctx.lineWidth = 0.5; pctx.stroke();
-                    }
-                });
-            });
-        }
-        function loop() { drawMatrix(); drawParticles(); requestAnimationFrame(loop); }
-        loop();
-    }
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else { init(); }
-})();
-</script>
-""", unsafe_allow_html=True)
 
 
 def render_login_page() -> bool:
     from backend.auth.auth_manager import login_user, register_user, validate_session
 
-    token = st.session_state.get("auth_token")
-    if token:
-        user = validate_session(token)
+    if st.session_state.get("auth_token"):
+        user = validate_session(st.session_state["auth_token"])
         if user:
             st.session_state["current_user"] = user
             return True
 
-    render_login_css()
-    render_cybersec_bg()
+    if "login_tab" not in st.session_state:
+        st.session_state["login_tab"] = "signin"
+    if "login_error" not in st.session_state:
+        st.session_state["login_error"] = ""
+    if "login_ok" not in st.session_state:
+        st.session_state["login_ok"] = ""
 
-    theme = st.session_state.get("theme", "dark")
-    if theme == "light":
-        bg, card, text, muted, border, accent = "#f0f6ff", "#ffffff", "#0f172a", "#64748b", "#cbd5e1", "#0284c7"
-    else:
-        bg, card, text, muted, border, accent = "#080f17", "#111f2e", "#f1f8ff", "#4a7090", "#1e3448", "#38bdf8"
+    mode  = st.session_state["login_tab"]
+    logo  = _logo_b64()
+    logo_src = f"data:image/png;base64,{logo}" if logo else ""
+    logo_img = (
+        f'<img src="{logo_src}" style="width:150px;height:auto;" alt="VerifAI">'
+        if logo_src else
+        '<div style="width:140px;height:140px;border-radius:50%;'
+        'background:linear-gradient(135deg,#1d4ed8,#4f46e5);'
+        'display:flex;align-items:center;justify-content:center;'
+        'font-size:56px;">🛡️</div>'
+    )
 
-    logo_b64 = get_logo_b64()
+    # ── Global CSS ────────────────────────────────────────────────────────
+    st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
-    _, center, _ = st.columns([1, 1.2, 1])
-    with center:
-        st.markdown("<div style='height:48px;'></div>", unsafe_allow_html=True)
+[data-testid="stDecoration"],
+[data-testid="stToolbar"],
+[data-testid="stStatusWidget"],
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="stBottom"],
+#MainMenu, footer, header { display: none !important; }
 
-        logo_html = (
-            f"<img src='data:image/png;base64,{logo_b64}' "
-            f"style='width:90px;height:90px;object-fit:contain;"
-            f"display:block;margin:0 auto 12px auto;' />"
-        ) if logo_b64 else ""
+html, body, .stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stAppViewBlockContainer"] {
+    background: #07101d !important;
+    overflow: hidden !important;
+    height: 100vh !important;
+}
+.main, section.main {
+    background: #07101d !important;
+    overflow: hidden !important;
+    height: 100vh !important;
+    padding: 0 !important;
+}
+.main .block-container {
+    padding: 0 !important;
+    max-width: 100% !important;
+    height: 100vh !important;
+    overflow: hidden !important;
+}
 
-        st.markdown(
-            f"<div style='text-align:center;margin-bottom:28px;position:relative;z-index:2;'>"
-            f"{logo_html}"
-            f"<div style='font-family:JetBrains Mono,monospace;font-size:30px;font-weight:700;"
-            f"color:{accent};letter-spacing:6px;'>VERIFAI</div>"
-            f"<div style='font-family:JetBrains Mono,monospace;font-size:9px;"
-            f"color:{muted};letter-spacing:4px;margin-top:6px;'>DIGITAL TRUST PLATFORM</div>"
-            f"</div>",
-            unsafe_allow_html=True)
+/* ── Right panel inputs ── */
+[data-testid="stTextInput"] label {
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    color: rgba(148,163,184,0.82) !important;
+    letter-spacing: 1px !important;
+    text-transform: uppercase !important;
+    font-family: 'Inter', sans-serif !important;
+}
+[data-testid="stTextInput"] > div > div {
+    background: rgba(10,20,45,0.88) !important;
+    border: 1.5px solid rgba(255,255,255,0.10) !important;
+    border-radius: 11px !important;
+    box-shadow: none !important;
+    transition: all 0.2s !important;
+}
+[data-testid="stTextInput"] > div > div:focus-within {
+    border-color: rgba(59,130,246,0.60) !important;
+    background: rgba(10,20,55,0.95) !important;
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.13) !important;
+}
+[data-testid="stTextInput"] input {
+    background: transparent !important;
+    color: #ffffff !important;
+    font-size: 14px !important;
+    font-family: 'Inter', sans-serif !important;
+    -webkit-text-fill-color: #ffffff !important;
+    caret-color: #3b82f6 !important;
+}
+[data-testid="stTextInput"] input::placeholder {
+    color: rgba(148,163,184,0.42) !important;
+    -webkit-text-fill-color: rgba(148,163,184,0.42) !important;
+}
+[data-testid="stTextInput"] button {
+    color: #475569 !important;
+    background: transparent !important;
+    border: none !important;
+}
 
-        if "auth_tab" not in st.session_state:
-            st.session_state["auth_tab"] = "login"
+/* Tab buttons */
+[data-testid="column"] [data-testid="stButton"] > button {
+    background: rgba(255,255,255,0.04) !important;
+    border: 1.5px solid rgba(255,255,255,0.09) !important;
+    color: #64748b !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    padding: 9px 0 !important;
+    border-radius: 10px !important;
+    font-family: 'Inter', sans-serif !important;
+    box-shadow: none !important;
+    transform: none !important;
+    filter: none !important;
+    transition: all 0.18s !important;
+}
+[data-testid="column"] [data-testid="stButton"] > button:hover {
+    background: rgba(255,255,255,0.08) !important;
+    color: #94a3b8 !important;
+    transform: none !important;
+    filter: none !important;
+    box-shadow: none !important;
+}
+.vf-active [data-testid="stButton"] > button {
+    background: rgba(59,130,246,0.15) !important;
+    border-color: rgba(59,130,246,0.38) !important;
+    color: #93c5fd !important;
+}
 
-        col_login, col_register = st.columns(2)
-        with col_login:
-            if st.button("SIGN IN", key="tab_login", use_container_width=True):
-                st.session_state["auth_tab"] = "login"
-                st.rerun()
-        with col_register:
-            if st.button("CREATE ACCOUNT", key="tab_register", use_container_width=True):
-                st.session_state["auth_tab"] = "register"
-                st.rerun()
+/* Submit button */
+.vf-go [data-testid="stButton"] > button {
+    background: linear-gradient(135deg, #2563eb, #4f46e5) !important;
+    border: none !important;
+    color: #ffffff !important;
+    font-size: 15px !important;
+    font-weight: 700 !important;
+    padding: 13px 0 !important;
+    border-radius: 11px !important;
+    font-family: 'Inter', sans-serif !important;
+    box-shadow: 0 4px 18px rgba(37,99,235,0.40) !important;
+    transition: all 0.2s ease !important;
+}
+.vf-go [data-testid="stButton"] > button:hover {
+    filter: brightness(1.10) !important;
+    box-shadow: 0 6px 26px rgba(37,99,235,0.58) !important;
+    transform: translateY(-1px) !important;
+}
 
-        is_login = st.session_state["auth_tab"] == "login"
-        st.markdown(
-            f"<div style='display:flex;margin-bottom:20px;'>"
-            f"<div style='flex:1;height:2px;background:{accent if is_login else border};'></div>"
-            f"<div style='flex:1;height:2px;background:{accent if not is_login else border};'></div>"
-            f"</div>",
-            unsafe_allow_html=True)
+/* Right column background */
+[data-testid="column"]:last-child {
+    background: #07101d !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
-        st.markdown(
-            f"<div style='background:{card};border:1px solid {border};"
-            f"border-radius:10px;padding:28px 28px 24px;margin-bottom:14px;"
-            f"position:relative;z-index:2;'>",
-            unsafe_allow_html=True)
+    # ── Two column layout ─────────────────────────────────────────────────
+    left, right = st.columns([1.1, 0.9], gap="small")
 
-        if is_login:
-            st.markdown(
-                f"<div style='font-family:JetBrains Mono,monospace;font-size:9px;"
-                f"color:{muted};letter-spacing:2px;margin-bottom:18px;'>SIGN IN TO YOUR ACCOUNT</div>",
-                unsafe_allow_html=True)
-            email    = st.text_input("", placeholder="Email address", key="login_email",    label_visibility="collapsed")
-            password = st.text_input("", placeholder="Password",      key="login_password", label_visibility="collapsed", type="password")
-            st.markdown("<div style='height:6px;'></div>", unsafe_allow_html=True)
-            if st.button("SIGN IN →", key="login_btn", use_container_width=True):
-                if not email or not password:
-                    st.markdown(f"<div style='color:#f87171;font-family:JetBrains Mono,monospace;font-size:11px;margin-top:8px;'>Please fill in all fields.</div>", unsafe_allow_html=True)
-                else:
-                    with st.spinner(""):
-                        result = login_user(email, password)
-                    if result["success"]:
-                        st.session_state["auth_token"]   = result["token"]
-                        st.session_state["current_user"] = result["user"]
-                        st.rerun()
-                    else:
-                        st.markdown(f"<div style='color:#f87171;font-family:JetBrains Mono,monospace;font-size:11px;margin-top:8px;'>{result['error']}</div>", unsafe_allow_html=True)
+    # ── LEFT: Animated panel via iframe ───────────────────────────────────
+    with left:
+        components.html(f"""
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box;}}
+html,body{{width:100%;height:100vh;overflow:hidden;background:#07101d;font-family:'Inter',sans-serif;}}
+#c{{position:fixed;inset:0;z-index:0;}}
+.scene{{position:relative;z-index:2;height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:32px 40px;text-align:center;}}
+.logo-stage{{position:relative;display:inline-block;margin-bottom:28px;transform-style:preserve-3d;animation:logo3d 9s ease-in-out infinite;}}
+.halo{{position:absolute;width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,rgba(124,58,237,0.15) 0%,transparent 65%);top:50%;left:50%;transform:translate(-50%,-50%);filter:blur(36px);animation:breathe 7s ease-in-out infinite reverse;}}
+.glow{{position:absolute;width:250px;height:250px;border-radius:50%;background:radial-gradient(circle,rgba(59,130,246,0.44) 0%,rgba(99,102,241,0.16) 45%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);filter:blur(24px);animation:breathe 4.5s ease-in-out infinite;}}
+.ring{{position:absolute;border-radius:50%;top:50%;left:50%;border-style:solid;}}
+.r1{{width:185px;height:185px;border-width:1.5px;border-color:rgba(59,130,246,0.38);transform:translate(-50%,-50%) rotateX(68deg);animation:orbit1 14s linear infinite;}}
+.r2{{width:230px;height:230px;border-width:1px;border-color:rgba(124,58,237,0.24);transform:translate(-50%,-50%) rotateX(68deg) rotateZ(55deg);animation:orbit2 22s linear infinite;}}
+.r3{{width:276px;height:276px;border-width:1px;border-style:dashed;border-color:rgba(59,130,246,0.10);transform:translate(-50%,-50%) rotateX(68deg) rotateZ(110deg);animation:orbit3 34s linear infinite;}}
+.orb-dot{{position:absolute;width:9px;height:9px;border-radius:50%;background:#60a5fa;box-shadow:0 0 16px 5px rgba(96,165,250,0.85);top:calc(50% - 4.5px);left:-4.5px;}}
+.logo-img{{position:relative;z-index:4;animation:wobble 9s ease-in-out infinite;filter:drop-shadow(0 0 28px rgba(59,130,246,0.68)) drop-shadow(0 0 64px rgba(99,102,241,0.34));padding:8px;}}
+.logo-img img{{width:150px;height:auto;display:block;}}
+.brand-title{{font-family:'Space Grotesk',sans-serif;font-size:52px;font-weight:800;line-height:1;letter-spacing:-2px;background:linear-gradient(120deg,#ffffff 0%,#bfdbfe 25%,#a78bfa 55%,#93c5fd 80%,#ffffff 100%);background-size:300% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:shine 8s linear infinite;margin-bottom:7px;}}
+.brand-sub{{font-size:10px;font-weight:700;letter-spacing:6px;text-transform:uppercase;color:rgba(148,163,184,0.34);margin-bottom:13px;}}
+.divline{{height:1.5px;width:0;margin:0 auto 18px;background:linear-gradient(90deg,transparent,#3b82f6,#7c3aed,transparent);border-radius:2px;animation:drawline 1.6s cubic-bezier(0.22,1,0.36,1) 0.3s forwards;}}
+.brand-desc{{font-size:13px;color:rgba(148,163,184,0.48);line-height:1.8;animation:fadeup 0.9s ease 0.7s both;}}
+.status{{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:20px;font-size:10px;color:rgba(100,116,139,0.36);animation:fadeup 0.6s ease 1.0s both;}}
+.sdot{{width:6px;height:6px;border-radius:50%;background:#22c55e;box-shadow:0 0 8px #22c55e;animation:blink 2.5s ease infinite;}}
+@keyframes logo3d{{0%{{transform:translateY(0) rotateY(-5deg) rotateX(3deg) scale(1);}}25%{{transform:translateY(-10px) rotateY(2deg) rotateX(-2deg) scale(1.02);}}50%{{transform:translateY(-15px) rotateY(6deg) rotateX(3deg) scale(1.03);}}75%{{transform:translateY(-7px) rotateY(-2deg) rotateX(0) scale(1.01);}}100%{{transform:translateY(0) rotateY(-5deg) rotateX(3deg) scale(1);}}}}
+@keyframes wobble{{0%,100%{{transform:rotate(-1.5deg) scale(1);}}50%{{transform:rotate(1.5deg) scale(1.05);}}}}
+@keyframes breathe{{0%,100%{{opacity:.7;transform:translate(-50%,-50%) scale(1);}}50%{{opacity:1;transform:translate(-50%,-50%) scale(1.15);}}}}
+@keyframes orbit1{{from{{transform:translate(-50%,-50%) rotateX(68deg) rotateZ(0deg);}}to{{transform:translate(-50%,-50%) rotateX(68deg) rotateZ(360deg);}}}}
+@keyframes orbit2{{from{{transform:translate(-50%,-50%) rotateX(68deg) rotateZ(55deg);}}to{{transform:translate(-50%,-50%) rotateX(68deg) rotateZ(415deg);}}}}
+@keyframes orbit3{{from{{transform:translate(-50%,-50%) rotateX(68deg) rotateZ(110deg);}}to{{transform:translate(-50%,-50%) rotateX(68deg) rotateZ(-250deg);}}}}
+@keyframes shine{{0%{{background-position:-200% center;}}100%{{background-position:200% center;}}}}
+@keyframes drawline{{from{{width:0;}}to{{width:70%;}}}}
+@keyframes fadeup{{from{{opacity:0;transform:translateY(10px);}}to{{opacity:1;transform:translateY(0);}}}}
+@keyframes blink{{0%,100%{{opacity:1;}}50%{{opacity:.2;}}}}
+</style></head><body>
+<canvas id="c"></canvas>
+<div class="scene">
+  <div class="logo-stage">
+    <div class="halo"></div><div class="glow"></div>
+    <div class="ring r1"><div class="orb-dot"></div></div>
+    <div class="ring r2"></div><div class="ring r3"></div>
+    <div class="logo-img">{logo_img}</div>
+  </div>
+  <div class="brand-title">VERIFAI</div>
+  <div class="brand-sub">Digital Trust Verification</div>
+  <div class="divline"></div>
+  <div class="brand-desc">AI-powered platform for identity verification,<br>fact-checking &amp; deepfake detection.</div>
+  <div class="status"><div class="sdot"></div>All systems operational</div>
+</div>
+<script>
+var cv=document.getElementById('c'),ctx=cv.getContext('2d');
+function resize(){{cv.width=window.innerWidth;cv.height=window.innerHeight;}}
+resize();window.addEventListener('resize',resize);
+var stars=Array.from({{length:120}},function(){{return{{x:Math.random()*2000,y:Math.random()*1200,r:Math.random()*1.3+0.3,a:Math.random(),da:(Math.random()-0.5)*0.004,dx:(Math.random()-0.5)*0.08,dy:-Math.random()*0.18-0.03}};}});
+var orbs=[{{x:0.18,y:0.25,r:0.28,c:'rgba(37,99,235,0.11)',s:0.00014}},{{x:0.80,y:0.70,r:0.22,c:'rgba(124,58,237,0.08)',s:0.00017}},{{x:0.50,y:0.05,r:0.18,c:'rgba(16,185,129,0.06)',s:0.00011}}];
+var t=0;
+function draw(){{
+    ctx.clearRect(0,0,cv.width,cv.height);
+    ctx.fillStyle='#07101d';ctx.fillRect(0,0,cv.width,cv.height);
+    orbs.forEach(function(o){{var cx=(o.x+Math.sin(t*o.s*1000)*0.055)*cv.width,cy=(o.y+Math.cos(t*o.s*800)*0.045)*cv.height,rad=o.r*Math.min(cv.width,cv.height),g=ctx.createRadialGradient(cx,cy,0,cx,cy,rad);g.addColorStop(0,o.c);g.addColorStop(1,'transparent');ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,rad,0,Math.PI*2);ctx.fill();}});
+    stars.forEach(function(s){{s.x+=s.dx;s.y+=s.dy;s.a+=s.da;if(s.a<0)s.da=Math.abs(s.da);if(s.a>1)s.da=-Math.abs(s.da);if(s.y<-5)s.y=cv.height+5;if(s.x<-5)s.x=cv.width+5;if(s.x>cv.width+5)s.x=-5;if(s.r>1.2&&s.a>0.7){{ctx.strokeStyle='rgba(148,163,184,'+(s.a*0.35).toFixed(2)+')';ctx.lineWidth=0.5;ctx.beginPath();ctx.moveTo(s.x-s.r*2.5,s.y);ctx.lineTo(s.x+s.r*2.5,s.y);ctx.stroke();ctx.beginPath();ctx.moveTo(s.x,s.y-s.r*2.5);ctx.lineTo(s.x,s.y+s.r*2.5);ctx.stroke();}}ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle='rgba(148,163,184,'+(s.a*0.48).toFixed(2)+')';ctx.fill();}});
+    t++;requestAnimationFrame(draw);
+}}
+draw();
+</script>
+</body></html>
+""", height=750, scrolling=False)
+
+    # ── RIGHT: Pure Streamlit form — 100% reliable ─────────────────────────
+    with right:
+        # Vertical centering spacer
+        st.markdown("<div style='height:8vh'></div>", unsafe_allow_html=True)
+
+        # Card
+        st.markdown("""
+<div style="background:rgba(12,22,40,0.0);max-width:380px;margin:0 auto;
+  font-family:'Inter',sans-serif;">
+""", unsafe_allow_html=True)
+
+        # Heading
+        if mode == "signin":
+            st.markdown("""
+<div style="margin-bottom:20px;">
+  <div style="font-size:24px;font-weight:700;color:#f1f5f9;letter-spacing:-0.4px;margin-bottom:3px;">
+    Welcome back 👋</div>
+  <div style="font-size:13px;color:rgba(148,163,184,0.58);line-height:1.5;">
+    Sign in to your VerifAI account to continue.</div>
+</div>""", unsafe_allow_html=True)
         else:
-            st.markdown(
-                f"<div style='font-family:JetBrains Mono,monospace;font-size:9px;"
-                f"color:{muted};letter-spacing:2px;margin-bottom:18px;'>CREATE A NEW ACCOUNT</div>",
-                unsafe_allow_html=True)
-            name     = st.text_input("", placeholder="Full name",              key="reg_name",     label_visibility="collapsed")
-            email    = st.text_input("", placeholder="Email address",           key="reg_email",    label_visibility="collapsed")
-            password = st.text_input("", placeholder="Password (min 8 chars)",  key="reg_password", label_visibility="collapsed", type="password")
-            confirm  = st.text_input("", placeholder="Confirm password",        key="reg_confirm",  label_visibility="collapsed", type="password")
-            st.markdown("<div style='height:6px;'></div>", unsafe_allow_html=True)
-            if st.button("CREATE ACCOUNT →", key="register_btn", use_container_width=True):
-                if not all([name, email, password, confirm]):
-                    st.markdown(f"<div style='color:#f87171;font-family:JetBrains Mono,monospace;font-size:11px;margin-top:8px;'>Please fill in all fields.</div>", unsafe_allow_html=True)
-                elif password != confirm:
-                    st.markdown(f"<div style='color:#f87171;font-family:JetBrains Mono,monospace;font-size:11px;margin-top:8px;'>Passwords do not match.</div>", unsafe_allow_html=True)
-                elif len(password) < 8:
-                    st.markdown(f"<div style='color:#f87171;font-family:JetBrains Mono,monospace;font-size:11px;margin-top:8px;'>Password must be at least 8 characters.</div>", unsafe_allow_html=True)
+            st.markdown("""
+<div style="margin-bottom:20px;">
+  <div style="font-size:24px;font-weight:700;color:#f1f5f9;letter-spacing:-0.4px;margin-bottom:3px;">
+    Create account ✨</div>
+  <div style="font-size:13px;color:rgba(148,163,184,0.58);line-height:1.5;">
+    Join VerifAI — start verifying today.</div>
+</div>""", unsafe_allow_html=True)
+
+        # Tabs
+        c1, c2 = st.columns(2, gap="small")
+        with c1:
+            st.markdown('<div class="vf-active">' if mode=="signin" else "<div>",
+                        unsafe_allow_html=True)
+            if st.button("Sign In",  key="t_si", use_container_width=True):
+                st.session_state["login_tab"] = "signin"
+                st.session_state["login_error"] = ""
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+        with c2:
+            st.markdown('<div class="vf-active">' if mode=="register" else "<div>",
+                        unsafe_allow_html=True)
+            if st.button("Register", key="t_re", use_container_width=True):
+                st.session_state["login_tab"] = "register"
+                st.session_state["login_error"] = ""
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        st.write("")
+
+        # ── SIGN IN ───────────────────────────────────────────────────────
+        if mode == "signin":
+            username = st.text_input("Username",
+                                     placeholder="Your username", key="si_u")
+            password = st.text_input("Password",
+                                     placeholder="Your password",
+                                     type="password", key="si_p")
+            st.write("")
+            st.markdown('<div class="vf-go">', unsafe_allow_html=True)
+            go = st.button("Sign in to VerifAI →", key="btn_si",
+                           use_container_width=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            if go:
+                if not username.strip() or not password:
+                    st.session_state["login_error"] = "Please enter your username and password."
+                    st.rerun()
                 else:
-                    with st.spinner(""):
-                        result = register_user(name, email, password)
-                    if result["success"]:
-                        st.markdown(f"<div style='color:#4ade80;font-family:JetBrains Mono,monospace;font-size:11px;margin-top:8px;'>Account created! Please sign in.</div>", unsafe_allow_html=True)
-                        st.session_state["auth_tab"] = "login"
-                        import time; time.sleep(1.2)
+                    with st.spinner("Verifying credentials…"):
+                        r = login_user(username.strip(), password)
+                    if r.get("success"):
+                        st.session_state["auth_token"]   = r["token"]
+                        st.session_state["current_user"] = r["user"]
+                        st.session_state["login_error"]  = ""
                         st.rerun()
                     else:
-                        st.markdown(f"<div style='color:#f87171;font-family:JetBrains Mono,monospace;font-size:11px;margin-top:8px;'>{result['error']}</div>", unsafe_allow_html=True)
+                        st.session_state["login_error"] = r.get("error", "Incorrect credentials.")
+                        st.rerun()
+
+            # Show error/success
+            if st.session_state.get("login_error"):
+                st.markdown(
+                    f"<div style='background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.28);"
+                    f"border-radius:10px;padding:10px 14px;color:#fca5a5;font-size:13px;"
+                    f"font-weight:500;margin-top:8px;font-family:Inter,sans-serif;'>"
+                    f"⚠️&nbsp; {st.session_state['login_error']}</div>",
+                    unsafe_allow_html=True)
+            if st.session_state.get("login_ok"):
+                st.markdown(
+                    f"<div style='background:rgba(34,197,94,0.10);border:1px solid rgba(34,197,94,0.28);"
+                    f"border-radius:10px;padding:10px 14px;color:#86efac;font-size:13px;"
+                    f"font-weight:500;margin-top:8px;font-family:Inter,sans-serif;'>"
+                    f"✅&nbsp; {st.session_state['login_ok']}</div>",
+                    unsafe_allow_html=True)
+                st.session_state["login_ok"] = ""
+
+            st.markdown(
+                "<div style='text-align:center;margin-top:18px;font-size:13px;"
+                "color:rgba(100,116,139,0.60);font-family:Inter,sans-serif;'>"
+                "No account?&nbsp;<span style='color:#3b82f6;font-weight:600;'>"
+                "Click Register above</span></div>",
+                unsafe_allow_html=True)
+
+        # ── REGISTER ─────────────────────────────────────────────────────
+        else:
+            st.text_input("Username",
+                          placeholder="Choose a username",     key="re_u")
+            st.text_input("Email Address",
+                          placeholder="you@example.com",       key="re_e")
+            st.text_input("Password",
+                          placeholder="Minimum 8 characters",
+                          type="password",                     key="re_p")
+            st.text_input("Confirm Password",
+                          placeholder="Repeat your password",
+                          type="password",                     key="re_c")
+            st.write("")
+            st.markdown('<div class="vf-go">', unsafe_allow_html=True)
+            go = st.button("Create Account →", key="btn_re",
+                           use_container_width=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            if go:
+                u = st.session_state.get("re_u","").strip()
+                e = st.session_state.get("re_e","").strip()
+                p = st.session_state.get("re_p","")
+                c = st.session_state.get("re_c","")
+                if not all([u,e,p,c]):
+                    msg = "All fields are required."
+                elif p != c:
+                    msg = "Passwords do not match."
+                elif len(p) < 8:
+                    msg = "Password must be at least 8 characters."
+                else:
+                    msg = None
+                if msg:
+                    st.session_state["login_error"] = msg
+                    st.rerun()
+                else:
+                    with st.spinner("Creating your account…"):
+                        r = register_user(u, e, p)
+                    if r.get("success"):
+                        st.session_state["login_ok"]    = "Account created — please sign in."
+                        st.session_state["login_tab"]   = "signin"
+                        st.session_state["login_error"] = ""
+                        st.rerun()
+                    else:
+                        st.session_state["login_error"] = r.get("error","Registration failed.")
+                        st.rerun()
+
+            if st.session_state.get("login_error"):
+                st.markdown(
+                    f"<div style='background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.28);"
+                    f"border-radius:10px;padding:10px 14px;color:#fca5a5;font-size:13px;"
+                    f"font-weight:500;margin-top:8px;font-family:Inter,sans-serif;'>"
+                    f"⚠️&nbsp; {st.session_state['login_error']}</div>",
+                    unsafe_allow_html=True)
+
+            st.markdown(
+                "<div style='text-align:center;margin-top:18px;font-size:13px;"
+                "color:rgba(100,116,139,0.60);font-family:Inter,sans-serif;'>"
+                "Already registered?&nbsp;<span style='color:#3b82f6;font-weight:600;'>"
+                "Click Sign In above</span></div>",
+                unsafe_allow_html=True)
+
+        # Security badges
+        st.markdown("""
+<div style="display:flex;justify-content:center;gap:6px;margin-top:16px;flex-wrap:wrap;">
+  <span style="display:flex;align-items:center;gap:4px;padding:3px 10px;
+    background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);
+    border-radius:20px;font-size:9px;font-weight:600;
+    color:rgba(100,116,139,0.45);font-family:Inter,sans-serif;letter-spacing:0.5px;text-transform:uppercase;">
+    <span style="width:4px;height:4px;border-radius:50%;background:#22c55e;
+      box-shadow:0 0 4px #22c55e;display:inline-block;"></span>bcrypt-256
+  </span>
+  <span style="display:flex;align-items:center;gap:4px;padding:3px 10px;
+    background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);
+    border-radius:20px;font-size:9px;font-weight:600;
+    color:rgba(100,116,139,0.45);font-family:Inter,sans-serif;letter-spacing:0.5px;text-transform:uppercase;">
+    <span style="width:4px;height:4px;border-radius:50%;background:#22c55e;
+      box-shadow:0 0 4px #22c55e;display:inline-block;"></span>Zero-Trust
+  </span>
+  <span style="display:flex;align-items:center;gap:4px;padding:3px 10px;
+    background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);
+    border-radius:20px;font-size:9px;font-weight:600;
+    color:rgba(100,116,139,0.45);font-family:Inter,sans-serif;letter-spacing:0.5px;text-transform:uppercase;">
+    <span style="width:4px;height:4px;border-radius:50%;background:#22c55e;
+      box-shadow:0 0 4px #22c55e;display:inline-block;"></span>AES Sessions
+  </span>
+</div>
+""", unsafe_allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown(
-            f"<div style='font-family:JetBrains Mono,monospace;font-size:9px;"
-            f"color:{muted};text-align:center;line-height:1.8;margin-bottom:16px;"
-            f"position:relative;z-index:2;'>"
-            f"Passwords encrypted with bcrypt &nbsp;·&nbsp; Sessions last 30 days</div>",
-            unsafe_allow_html=True)
-
-        col_d, col_l = st.columns(2)
-        with col_d:
-            if st.button("DARK", key="login_dark", use_container_width=True):
-                st.session_state["theme"] = "dark"
-                st.rerun()
-        with col_l:
-            if st.button("LIGHT", key="login_light", use_container_width=True):
-                st.session_state["theme"] = "light"
-                st.rerun()
 
     return False
