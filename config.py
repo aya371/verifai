@@ -36,7 +36,7 @@ class Config:
         )
     
     # Claude Settings
-    CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-3-haiku-20240307")
+    CLAUDE_MODEL = "claude-haiku-4-5-20251001"
     CLAUDE_MAX_TOKENS = int(os.getenv("CLAUDE_MAX_TOKENS", "1000"))
     CLAUDE_TEMPERATURE = float(os.getenv("CLAUDE_TEMPERATURE", "0.1"))
     
